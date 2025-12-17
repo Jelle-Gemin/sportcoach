@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '../../contexts/AuthContext';
 import { useActivities } from '../../hooks/useActivities';
@@ -29,7 +29,8 @@ export default function ProfilePage() {
     error: activitiesError,
     loadMore,
     hasMore,
-  } = useActivities(1, 10); // Load 10 activities initially
+    refetch,
+  } = useActivities(0, 10, isAuthenticated); // Load 10 activities initially, enabled when authenticated
 
   // Redirect if not authenticated
   useEffect(() => {

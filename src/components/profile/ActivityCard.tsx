@@ -43,6 +43,19 @@ export function ActivityCard({ activity, onClick }: ActivityCardProps) {
         return '🏃';
       case 'swim':
         return '🏊';
+      case 'workout':
+      case 'weighttraining':
+      case 'strength':
+        return '💪';
+      case 'yoga':
+        return '🧘';
+      case 'hike':
+        return '🥾';
+      case 'walk':
+        return '🚶';
+      case 'ski':
+      case 'snowboard':
+        return '🎿';
       default:
         return '⚽';
     }

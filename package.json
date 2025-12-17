@@ -6,9 +6,12 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "test": "jest",
+    "test:watch": "jest --watch"
   },
   "dependencies": {
+    "mongodb": "^6.3.0",
     "next": "16.0.10",
     "react": "19.2.1",
     "react-dom": "19.2.1"
