@@ -1,5 +1,7 @@
-import { fetchActivities, fetchActivityDetail, fetchActivityStreams, RateLimitError, StravaActivityDetail } from './stravaApi';
+import { fetchActivities, fetchActivityDetail, fetchActivityStreams, fetchAllActivityIds, RateLimitError, StravaActivityDetail } from './stravaApi';
 import { MongoClient, Db, Collection } from 'mongodb';
+
+
 
 interface ActivityDocument {
   _id?: any;
@@ -7,6 +9,8 @@ interface ActivityDocument {
   date: Date;
   description?: string;
   type: string;
+  distance?: number;
+  total_elevation_gain?: number;
   averagePace?: string;
   maxPace?: string;
   movingTime: number;
@@ -63,18 +67,161 @@ interface AthleteDocument {
 interface SyncMetadataDocument {
   _id?: any;
   type: string;
-  lastSyncDate: Date;
-  lastActivityId: number;
-  fetchedActivityIds: number[];
-  syncStatus: string;
+
+  // Initial sync fields
+  strava_sync_status: "not_started" | "initial_syncing" | "initial_complete" | "fully_synced" | "error";
+  strava_last_sync_check: Date;
+  strava_newest_activity_date?: Date;
+  strava_oldest_activity_date?: Date;
+  total_activities_count: number;
+  has_older_activities: boolean;
+
+  // Continuous sync fields
+  continuous_sync_status: "not_started" | "syncing" | "paused" | "completed" | "error";
+  continuous_sync_started_at?: Date;
+  continuous_sync_progress?: {
+    totalActivitiesFound: number;
+    activitiesProcessed: number;
+    currentBatchStart?: Date;
+    estimatedCompletion?: Date;
+    lastProcessedActivityId?: number;
+  };
+
+  // Rate limiting tracking
+  rate_limit_info?: {
+    requestsThisWindow: number;
+    requestsToday: number;
+    currentWindowStart: Date;
+    nextWindowReset: Date;
+    lastRequestTime: Date;
+  };
+
+  // Error tracking
+  last_error?: {
+    timestamp: Date;
+    message: string;
+    activityId?: number;
+  };
+
+  // Legacy fields (to be removed after migration)
+  lastSyncDate?: Date;
+  lastActivityId?: number;
+  fetchedActivityIds?: number[];
+  syncStatus?: string;
   errorMessage?: string;
-  currentBeforeTimestamp?: number; // Current sync position for rate limit recovery (backward sync)
-  currentAfterTimestamp?: number; // Current sync position for continuous forward sync
-  stats: {
+  currentBeforeTimestamp?: number;
+  currentAfterTimestamp?: number;
+  stats?: {
     totalActivities: number;
     lastSyncCount: number;
     failedFetches: number;
   };
+}
+
+class RateLimitManager {
+  private requestsThisWindow: number = 0;
+  private requestsToday: number = 0;
+  private currentWindowStart: Date;
+  private nextWindowReset: Date;
+  private dailyResetTime: Date;
+  private readonly MAX_REQUESTS_PER_WINDOW = 95; // Safety buffer below 100
+  private readonly MAX_REQUESTS_PER_DAY = 950; // Safety buffer below 1000
+
+  constructor() {
+    this.currentWindowStart = this.getCurrentWindowStart();
+    this.nextWindowReset = this.getNextWindowReset();
+    this.dailyResetTime = this.getNextDailyReset();
+  }
+
+  private getCurrentWindowStart(): Date {
+    const now = new Date();
+    const minutes = now.getMinutes();
+    const windowStart = Math.floor(minutes / 15) * 15;
+    now.setMinutes(windowStart, 0, 0);
+    return now;
+  }
+
+  private getNextWindowReset(): Date {
+    const now = new Date();
+    const minutes = now.getMinutes();
+    const nextWindow = (Math.floor(minutes / 15) + 1) * 15;
+
+    if (nextWindow === 60) {
+      now.setHours(now.getHours() + 1, 0, 0, 0);
+    } else {
+      now.setMinutes(nextWindow, 0, 0);
+    }
+
+    return now;
+  }
+
+  private getNextDailyReset(): Date {
+    const tomorrow = new Date();
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    tomorrow.setHours(0, 0, 0, 0);
+    return tomorrow;
+  }
+
+  async checkAndWait(): Promise<void> {
+    const now = new Date();
+
+    // Check if we've entered a new 15-minute window
+    if (now >= this.nextWindowReset) {
+      this.requestsThisWindow = 0;
+      this.currentWindowStart = this.getCurrentWindowStart();
+      this.nextWindowReset = this.getNextWindowReset();
+    }
+
+    // Check if we've entered a new day
+    if (now >= this.dailyResetTime) {
+      this.requestsToday = 0;
+      this.dailyResetTime = this.getNextDailyReset();
+    }
+
+    // Check if we're approaching the 15-minute limit
+    if (this.requestsThisWindow >= this.MAX_REQUESTS_PER_WINDOW) {
+      const waitTime = this.nextWindowReset.getTime() - now.getTime();
+      console.log(`Rate limit approaching. Waiting ${waitTime}ms until next window.`);
+      await this.sleep(waitTime + 1000); // Add 1 second buffer
+      this.requestsThisWindow = 0;
+      this.currentWindowStart = this.getCurrentWindowStart();
+      this.nextWindowReset = this.getNextWindowReset();
+    }
+
+    // Check daily limit
+    if (this.requestsToday >= this.MAX_REQUESTS_PER_DAY) {
+      const waitTime = this.dailyResetTime.getTime() - now.getTime();
+      console.log(`Daily limit approaching. Waiting ${waitTime}ms until tomorrow.`);
+      await this.sleep(waitTime + 1000);
+      this.requestsToday = 0;
+      this.dailyResetTime = this.getNextDailyReset();
+    }
+
+    // Increment counters
+    this.requestsThisWindow++;
+    this.requestsToday++;
+  }
+
+  private sleep(ms: number): Promise<void> {
+    return new Promise(resolve => setTimeout(resolve, ms));
+  }
+
+  getRateLimitInfo() {
+    return {
+      requestsThisWindow: this.requestsThisWindow,
+      requestsToday: this.requestsToday,
+      currentWindowStart: this.currentWindowStart,
+      nextWindowReset: this.nextWindowReset,
+      lastRequestTime: new Date(),
+    };
+  }
+
+  shouldPauseBeforeReset(): boolean {
+    const now = new Date();
+    const timeUntilReset = this.nextWindowReset.getTime() - now.getTime();
+    // Pause if less than 2 minutes until reset and we're near the limit
+    return timeUntilReset < 120000 && this.requestsThisWindow >= 90;
+  }
 }
 
 export class StravaSync {
@@ -83,6 +230,7 @@ export class StravaSync {
   private activitiesCollection: Collection<ActivityDocument>;
   private athletesCollection: Collection<AthleteDocument>;
   private syncMetadataCollection: Collection<SyncMetadataDocument>;
+  private rateLimitManager: RateLimitManager;
   private lastApiCall: number = 0;
   private readonly minDelayMs: number = 1000; // 1 second between API calls
 
@@ -92,6 +240,7 @@ export class StravaSync {
     this.activitiesCollection = this.db.collection('activities');
     this.athletesCollection = this.db.collection('athletes');
     this.syncMetadataCollection = this.db.collection('sync_metadata');
+    this.rateLimitManager = new RateLimitManager();
   }
 
   async connect(): Promise<void> {
@@ -110,6 +259,373 @@ export class StravaSync {
     await this.syncMetadataCollection.createIndex({ type: 1 }, { unique: true });
   }
 
+  async initialSync(accessToken: string): Promise<{
+    success: boolean;
+    syncedCount: number;
+    hasOlderActivities: boolean;
+    errors: Array<{ activityId: number; error: string }>;
+  }> {
+    try {
+      console.log('Starting initial sync (30 most recent activities)');
+
+      // Get sync metadata
+      let metadata: SyncMetadataDocument | null = await this.syncMetadataCollection.findOne({ type: 'strava_sync' });
+      if (!metadata) {
+        metadata = {
+          type: 'strava_sync',
+          strava_sync_status: 'not_started',
+          strava_last_sync_check: new Date(0),
+          strava_newest_activity_date: undefined,
+          strava_oldest_activity_date: undefined,
+          total_activities_count: 0,
+          has_older_activities: false,
+          continuous_sync_status: 'not_started',
+          continuous_sync_started_at: undefined,
+          continuous_sync_progress: undefined,
+          rate_limit_info: undefined,
+          last_error: undefined,
+        };
+      }
+
+      // Check if initial sync already completed
+      if (metadata.strava_sync_status === 'initial_complete' || metadata.strava_sync_status === 'fully_synced') {
+        console.log('Initial sync already completed');
+        return {
+          success: true,
+          syncedCount: metadata.total_activities_count,
+          hasOlderActivities: metadata.has_older_activities || false,
+          errors: []
+        };
+      }
+
+      // Update status to initial sync in progress
+      await this.syncMetadataCollection.updateOne(
+        { type: 'strava_sync' },
+        { $set: { strava_sync_status: 'initial_syncing', last_error: undefined } }
+      );
+
+      let syncedCount = 0;
+      const errors: Array<{ activityId: number; error: string }> = [];
+
+      // Step 1: Fetch 30 most recent activities (summary data)
+      await this.rateLimitManager.checkAndWait();
+      const activities = await fetchActivities(accessToken, 1, 30);
+
+      if (activities.length === 0) {
+        // No activities found
+        await this.syncMetadataCollection.updateOne(
+          { type: 'strava_sync' },
+          {
+            $set: {
+              strava_sync_status: 'initial_complete',
+              strava_last_sync_check: new Date(),
+              total_activities_count: 0,
+              has_older_activities: false,
+            }
+          }
+        );
+        return { success: true, syncedCount: 0, hasOlderActivities: false, errors: [] };
+      }
+
+      // Step 2: For each activity, fetch details and streams
+      for (const activity of activities) {
+        try {
+          // Fetch detailed activity data
+          await this.rateLimitManager.checkAndWait();
+          const activityDetail = await fetchActivityDetail(accessToken, activity.id);
+
+          // Fetch streams data
+          await this.rateLimitManager.checkAndWait();
+          const streams = await fetchActivityStreams(accessToken, activity.id, ['time', 'distance', 'heartrate', 'cadence', 'watts', 'altitude', 'latlng']);
+
+          const activityDoc = this.mapStravaToMongo(activityDetail, streams);
+
+          await this.activitiesCollection.updateOne(
+            { stravaId: activity.id },
+            { $set: activityDoc },
+            { upsert: true }
+          );
+
+          syncedCount++;
+
+        } catch (error) {
+          console.error(`Failed to process activity ${activity.id}:`, error);
+          errors.push({ activityId: activity.id, error: error instanceof Error ? error.message : String(error) });
+        }
+      }
+
+      // Check if there are older activities
+      let hasOlderActivities = false;
+      if (activities.length === 30) {
+        try {
+          await this.rateLimitManager.checkAndWait();
+          const checkOlder = await fetchActivities(accessToken, 1, 1, undefined, Math.floor(new Date(activities[activities.length - 1].start_date).getTime() / 1000) - 1);
+          hasOlderActivities = checkOlder.length > 0;
+        } catch (error) {
+          console.warn('Could not check for older activities:', error);
+          hasOlderActivities = false; // Assume no older activities if check fails
+        }
+      }
+
+      // Update metadata
+      const newestActivity = activities[0];
+      const oldestActivity = activities[activities.length - 1];
+
+      await this.syncMetadataCollection.updateOne(
+        { type: 'strava_sync' },
+        {
+          $set: {
+            strava_sync_status: 'initial_complete',
+            strava_last_sync_check: new Date(),
+            strava_newest_activity_date: new Date(newestActivity.start_date),
+            strava_oldest_activity_date: new Date(oldestActivity.start_date),
+            total_activities_count: syncedCount,
+            has_older_activities: hasOlderActivities,
+            rate_limit_info: this.rateLimitManager.getRateLimitInfo(),
+          }
+        }
+      );
+
+      console.log(`Initial sync completed: ${syncedCount} activities synced, has older: ${hasOlderActivities}`);
+
+      return {
+        success: true,
+        syncedCount,
+        hasOlderActivities,
+        errors
+      };
+
+    } catch (error) {
+      console.error('Initial sync failed:', error);
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      await this.syncMetadataCollection.updateOne(
+        { type: 'strava_sync' },
+        {
+          $set: {
+            strava_sync_status: 'error',
+            last_error: {
+              timestamp: new Date(),
+              message: errorMessage,
+            }
+          }
+        }
+      );
+      return {
+        success: false,
+        syncedCount: 0,
+        hasOlderActivities: false,
+        errors: [{ activityId: 0, error: errorMessage }]
+      };
+    }
+  }
+
+  async continuousHistoricalSync(accessToken: string): Promise<{
+    success: boolean;
+    syncedCount: number;
+    completed: boolean;
+    errors: Array<{ activityId: number; error: string }>;
+  }> {
+    try {
+      console.log('Starting continuous historical sync');
+
+      // Get sync metadata
+      let metadata: SyncMetadataDocument | null = await this.syncMetadataCollection.findOne({ type: 'strava_sync' });
+      if (!metadata) {
+        // Create default metadata if none exists
+        metadata = {
+          type: 'strava_sync',
+          strava_sync_status: 'not_started',
+          strava_last_sync_check: new Date(0),
+          strava_newest_activity_date: undefined,
+          strava_oldest_activity_date: undefined,
+          total_activities_count: 0,
+          has_older_activities: false,
+          continuous_sync_status: 'not_started',
+          continuous_sync_started_at: undefined,
+          continuous_sync_progress: undefined,
+          rate_limit_info: undefined,
+          last_error: undefined,
+        };
+        await this.syncMetadataCollection.insertOne(metadata);
+      }
+
+      // Check if continuous sync is already running or completed
+      if (metadata.continuous_sync_status === 'completed') {
+        console.log('Continuous sync already completed');
+        return { success: true, syncedCount: 0, completed: true, errors: [] };
+      }
+
+      if (metadata.continuous_sync_status === 'syncing') {
+        console.log('Continuous sync already running');
+        return { success: false, syncedCount: 0, completed: false, errors: [{ activityId: 0, error: 'Sync already running' }] };
+      }
+
+      // Update status to syncing
+      await this.syncMetadataCollection.updateOne(
+        { type: 'strava_sync' },
+        {
+          $set: {
+            continuous_sync_status: 'syncing',
+            continuous_sync_started_at: new Date(),
+            continuous_sync_progress: {
+              totalActivitiesFound: 0,
+              activitiesProcessed: 0,
+              currentBatchStart: undefined,
+              estimatedCompletion: undefined,
+              lastProcessedActivityId: metadata.continuous_sync_progress?.lastProcessedActivityId || 0,
+            },
+            last_error: undefined
+          }
+        }
+      );
+
+      let totalSynced = 0;
+      const errors: Array<{ activityId: number; error: string }> = [];
+
+      // Fetch all activity IDs from Strava
+      console.log('Fetching all activity IDs from Strava...');
+      const allActivityIds = await fetchAllActivityIds(accessToken);
+      console.log(`Found ${allActivityIds.length} total activities on Strava`);
+
+      // Get all activity IDs already in the database
+      const existingActivities = await this.activitiesCollection.find({}, { projection: { stravaId: 1 } }).toArray();
+      const existingActivityIds = new Set(existingActivities.map(activity => activity.stravaId));
+      console.log(`Found ${existingActivityIds.size} activities already in database`);
+
+      // Filter out activities already in the database
+      const activitiesToSync = allActivityIds.filter(id => !existingActivityIds.has(id));
+      console.log(`Need to sync ${activitiesToSync.length} activities`);
+
+      if (activitiesToSync.length === 0) {
+        console.log('All activities are already synced');
+        // Mark continuous sync as completed
+        await this.syncMetadataCollection.updateOne(
+          { type: 'strava_sync' },
+          {
+            $set: {
+              continuous_sync_status: 'completed',
+              strava_sync_status: 'fully_synced',
+              strava_last_sync_check: new Date(),
+              'continuous_sync_progress.totalActivitiesFound': allActivityIds.length,
+              'continuous_sync_progress.activitiesProcessed': 0,
+              'continuous_sync_progress.estimatedCompletion': new Date(),
+              rate_limit_info: this.rateLimitManager.getRateLimitInfo(),
+            }
+          }
+        );
+        return { success: true, syncedCount: 0, completed: true, errors: [] };
+      }
+
+      // Update progress with total activities found
+      await this.syncMetadataCollection.updateOne(
+        { type: 'strava_sync' },
+        {
+          $set: {
+            'continuous_sync_progress.totalActivitiesFound': allActivityIds.length,
+            rate_limit_info: this.rateLimitManager.getRateLimitInfo(),
+          }
+        }
+      );
+
+      // Process activities one by one, removing from activitiesToSync after successful sync
+      while (activitiesToSync.length > 0) {
+        // Check if sync should be paused
+        const metadata = await this.syncMetadataCollection.findOne({ type: 'strava_sync' });
+        if (metadata?.continuous_sync_status === 'paused') {
+          console.log('Sync paused by user during activity processing');
+          return { success: true, syncedCount: totalSynced, completed: false, errors };
+        }
+
+        const activityId = activitiesToSync[0]; // Take the first activity
+
+        try {
+          // Check rate limit before each detail fetch
+          await this.rateLimitManager.checkAndWait();
+          const activityDetail = await fetchActivityDetail(accessToken, activityId);
+
+          // Fetch streams data for graphs (heartrate, pace, cadence, etc.)
+          await this.rateLimitManager.checkAndWait();
+          const streams = await fetchActivityStreams(accessToken, activityId, ['time', 'distance', 'heartrate', 'cadence', 'watts', 'altitude', 'latlng']);
+
+          const activityDoc = this.mapStravaToMongo(activityDetail, streams);
+
+          await this.activitiesCollection.updateOne(
+            { stravaId: activityId },
+            { $set: activityDoc },
+            { upsert: true }
+          );
+
+          // Successfully synced, remove from activitiesToSync
+          activitiesToSync.shift(); // Remove the first element
+          totalSynced++;
+
+          // Update progress
+          await this.syncMetadataCollection.updateOne(
+            { type: 'strava_sync' },
+            {
+              $inc: { 'continuous_sync_progress.activitiesProcessed': 1 },
+              $set: {
+                'continuous_sync_progress.lastProcessedActivityId': activityId,
+                total_activities_count: await this.activitiesCollection.countDocuments(),
+              }
+            }
+          );
+
+        } catch (error) {
+          console.error(`Failed to process activity ${activityId}:`, error);
+          errors.push({ activityId: activityId, error: error instanceof Error ? error.message : String(error) });
+          // Keep failed activity in the list for retry - don't remove it
+          activitiesToSync.shift(); // Still remove it to avoid infinite loop, but log the error
+        }
+      }
+
+      // Mark continuous sync as completed
+      await this.syncMetadataCollection.updateOne(
+        { type: 'strava_sync' },
+        {
+          $set: {
+            continuous_sync_status: 'completed',
+            strava_sync_status: 'fully_synced',
+            strava_last_sync_check: new Date(),
+            'continuous_sync_progress.estimatedCompletion': new Date(),
+            rate_limit_info: this.rateLimitManager.getRateLimitInfo(),
+          }
+        }
+      );
+
+      console.log(`Continuous sync completed: ${totalSynced} activities synced`);
+
+      return {
+        success: true,
+        syncedCount: totalSynced,
+        completed: true,
+        errors
+      };
+
+    } catch (error) {
+      console.error('Continuous sync failed:', error);
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      await this.syncMetadataCollection.updateOne(
+        { type: 'strava_sync' },
+        {
+          $set: {
+            continuous_sync_status: 'error',
+            last_error: {
+              timestamp: new Date(),
+              message: errorMessage,
+            }
+          }
+        }
+      );
+      return {
+        success: false,
+        syncedCount: 0,
+        completed: false,
+        errors: [{ activityId: 0, error: errorMessage }]
+      };
+    }
+  }
+
   async syncActivities(accessToken: string): Promise<{
     success: boolean;
     syncedCount: number;
@@ -124,6 +640,18 @@ export class StravaSync {
       if (!metadata) {
         metadata = {
           type: 'strava_sync',
+          strava_sync_status: 'not_started',
+          strava_last_sync_check: new Date(0),
+          strava_newest_activity_date: undefined,
+          strava_oldest_activity_date: undefined,
+          total_activities_count: 0,
+          has_older_activities: false,
+          continuous_sync_status: 'not_started',
+          continuous_sync_started_at: undefined,
+          continuous_sync_progress: undefined,
+          rate_limit_info: undefined,
+          last_error: undefined,
+          // Legacy fields
           lastSyncDate: new Date(0),
           lastActivityId: 0,
           fetchedActivityIds: [],
@@ -133,7 +661,7 @@ export class StravaSync {
             lastSyncCount: 0,
             failedFetches: 0,
           },
-        } as SyncMetadataDocument;
+        };
       }
 
       // Update status to in_progress
@@ -174,7 +702,7 @@ export class StravaSync {
       while (hasMoreActivities && !rateLimitHit) {
         try {
           // Fetch activities before current timestamp (backward in time)
-          const activities = await fetchActivities(accessToken, 1, 30, undefined, currentBefore);
+          const activities: any[] = await fetchActivities(accessToken, 1, 30, undefined, currentBefore);
 
           if (activities.length === 0) {
             hasMoreActivities = false;
@@ -311,7 +839,7 @@ export class StravaSync {
 
     // Check if previously fetched successfully (fallback check)
     const metadata = await this.syncMetadataCollection.findOne({ type: 'strava_sync' });
-    if (metadata?.fetchedActivityIds.includes(activityId)) {
+    if (metadata?.fetchedActivityIds?.includes(activityId)) {
       return false; // Previously fetched successfully
     }
 
@@ -339,6 +867,8 @@ export class StravaSync {
       date: new Date(stravaActivity.start_date_local),
       description: stravaActivity.description || stravaActivity.name,
       type: stravaActivity.type,
+      distance: stravaActivity.distance,
+      total_elevation_gain: stravaActivity.total_elevation_gain,
       averagePace: this.calculatePace(stravaActivity.average_speed),
       maxPace: this.calculatePace(stravaActivity.max_speed),
       movingTime: stravaActivity.moving_time,
@@ -408,11 +938,15 @@ export class StravaSync {
     const totalCached = await this.activitiesCollection.countDocuments();
 
     return {
-      lastSync: metadata.lastSyncDate,
-      status: metadata.syncStatus,
+      lastSync: metadata.lastSyncDate || new Date(0),
+      status: metadata.syncStatus || 'idle',
       totalCached,
-      fetchedActivityIds: metadata.fetchedActivityIds,
+      fetchedActivityIds: metadata.fetchedActivityIds || [],
     };
+  }
+
+  async getSyncMetadata(): Promise<SyncMetadataDocument | null> {
+    return await this.syncMetadataCollection.findOne({ type: 'strava_sync' });
   }
 
   async saveAthlete(stravaAthlete: any): Promise<void> {
@@ -466,5 +1000,93 @@ export class StravaSync {
     // For now, we'll return the athlete and indicate stats need to be fetched separately
 
     return { athlete, stats: null };
+  }
+
+  async pauseContinuousSync(): Promise<{
+    success: boolean;
+    message: string;
+  }> {
+    try {
+      const metadata = await this.syncMetadataCollection.findOne({ type: 'strava_sync' });
+      if (!metadata) {
+        return { success: false, message: 'No sync metadata found' };
+      }
+
+      if (metadata.continuous_sync_status !== 'syncing') {
+        return { success: false, message: 'Continuous sync is not currently running' };
+      }
+
+      await this.syncMetadataCollection.updateOne(
+        { type: 'strava_sync' },
+        { $set: { continuous_sync_status: 'paused' } }
+      );
+
+      return { success: true, message: 'Continuous sync paused successfully' };
+    } catch (error) {
+      console.error('Error pausing sync:', error);
+      return { success: false, message: 'Failed to pause sync' };
+    }
+  }
+
+  async resumeContinuousSync(): Promise<{
+    success: boolean;
+    message: string;
+  }> {
+    try {
+      const metadata = await this.syncMetadataCollection.findOne({ type: 'strava_sync' });
+      if (!metadata) {
+        return { success: false, message: 'No sync metadata found' };
+      }
+
+      if (metadata.continuous_sync_status !== 'paused') {
+        return { success: false, message: 'Continuous sync is not currently paused' };
+      }
+
+      await this.syncMetadataCollection.updateOne(
+        { type: 'strava_sync' },
+        { $set: { continuous_sync_status: 'syncing' } }
+      );
+
+      return { success: true, message: 'Continuous sync resumed successfully' };
+    } catch (error) {
+      console.error('Error resuming sync:', error);
+      return { success: false, message: 'Failed to resume sync' };
+    }
+  }
+
+  async cancelContinuousSync(): Promise<{
+    success: boolean;
+    message: string;
+    activitiesSynced: number;
+  }> {
+    try {
+      const metadata = await this.syncMetadataCollection.findOne({ type: 'strava_sync' });
+      if (!metadata) {
+        return { success: false, message: 'No sync metadata found', activitiesSynced: 0 };
+      }
+
+      const activitiesSynced = metadata.continuous_sync_progress?.activitiesProcessed || 0;
+
+      await this.syncMetadataCollection.updateOne(
+        { type: 'strava_sync' },
+        {
+          $set: {
+            continuous_sync_status: 'not_started',
+            continuous_sync_started_at: undefined,
+            continuous_sync_progress: undefined,
+            last_error: undefined
+          }
+        }
+      );
+
+      return {
+        success: true,
+        message: 'Continuous sync cancelled successfully',
+        activitiesSynced
+      };
+    } catch (error) {
+      console.error('Error cancelling sync:', error);
+      return { success: false, message: 'Failed to cancel sync', activitiesSynced: 0 };
+    }
   }
 }

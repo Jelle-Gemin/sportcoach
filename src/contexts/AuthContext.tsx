@@ -84,12 +84,12 @@ export function AuthProvider({ children }: AuthProviderProps) {
 
         // Trigger background sync when user is authenticated
         try {
-          await fetch('/api/sync/activities', {
+          await fetch('/api/sync/inital', {
             method: 'POST',
             headers: {
               'Content-Type': 'application/json',
             },
-            body: JSON.stringify({ mode: 'continuous' }),
+            body: JSON.stringify({ mode: 'initial' }),
           });
         } catch (syncError) {
           console.error('Failed to trigger background sync:', syncError);

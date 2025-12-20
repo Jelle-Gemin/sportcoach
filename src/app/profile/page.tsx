@@ -5,11 +5,14 @@ import { useRouter } from 'next/navigation';
 import { useAuth } from '../../contexts/AuthContext';
 import { useActivities } from '../../hooks/useActivities';
 import { useProfile } from '../../hooks/useProfile';
+import { useInitialSync } from '../../hooks/useInitialSync';
+import { useTotalActivities } from '../../hooks/useTotalActivities';
 
 import { ProfileStats } from '../../components/profile/ProfileStats';
 import { ProfileHeader } from '@/components/profile/ProfileHeader';
 import { ProfileSkeleton } from '@/components/profile/ProfileSkeleton';
 import { ActivityList } from '@/components/profile/ActivityList';
+import { SyncControl } from '@/components/profile/SyncControl';
 
 
 export default function ProfilePage() {
@@ -32,6 +35,16 @@ export default function ProfilePage() {
     refetch,
   } = useActivities(0, 10, isAuthenticated); // Load 10 activities initially, enabled when authenticated
 
+  const {
+    isLoading: initialSyncLoading,
+    isCompleted: initialSyncCompleted,
+    syncedCount: initialSyncedCount,
+    hasOlderActivities,
+    error: initialSyncError,
+  } = useInitialSync();
+
+  const { totalActivities, loading: totalActivitiesLoading, error: totalActivitiesError } = useTotalActivities();
+
   // Redirect if not authenticated
   useEffect(() => {
     if (!authLoading && !isAuthenticated) {
@@ -53,8 +66,38 @@ export default function ProfilePage() {
     return null;
   }
 
+  // Show initial sync loading screen
+  if (initialSyncLoading) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="max-w-md mx-auto text-center">
+          <div className="animate-spin rounded-full h-16 w-16 border-b-2 border-blue-600 mx-auto mb-4"></div>
+          <h2 className="text-xl font-semibold text-gray-900 mb-2">Setting up your profile...</h2>
+          <p className="text-gray-600">Syncing your recent activities</p>
+          <div className="mt-4">
+            <div className="w-full bg-gray-200 rounded-full h-2">
+              <div className="bg-blue-600 h-2 rounded-full animate-pulse" style={{ width: '60%' }}></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (totalActivitiesLoading || totalActivities === null) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="max-w-md mx-auto text-center">
+          <div className="animate-spin rounded-full h-16 w-16 border-b-2 border-blue-600 mx-auto mb-4"></div>
+          <h2 className="text-xl font-semibold text-gray-900 mb-2">Loading your activities...</h2>
+          <p className="text-gray-600">Fetching your total activity count</p>
+        </div>
+      </div>
+    );
+  }
+
   const loading = profileLoading || activitiesLoading;
-  const error = profileError || activitiesError;
+  const error = profileError || activitiesError || initialSyncError || totalActivitiesError;
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -95,6 +138,8 @@ export default function ProfilePage() {
               />
             )}
 
+            <SyncControl />
+
             <div className="bg-white rounded-lg shadow-sm p-6">
               <ActivityList
                 activities={activities}
@@ -109,4 +154,3 @@ export default function ProfilePage() {
     </div>
   );
 }
-

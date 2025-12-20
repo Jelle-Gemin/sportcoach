@@ -36,24 +36,29 @@ export async function GET(request: NextRequest) {
         },
       });
 
+      let stravaAthlete = null;
+      let rateLimitHit = false;
+
       if (!athleteResponse.ok) {
         if (athleteResponse.status === 401) {
           return NextResponse.json({ error: 'Token expired' }, { status: 401 });
         }
         if (athleteResponse.status === 429) {
-          return NextResponse.json({ error: 'Rate limit exceeded. Please try again later.' }, { status: 429 });
+          // Rate limit hit - proceed to fetch from database instead
+          console.log('Rate limit hit during token verification, fetching from database');
+          rateLimitHit = true;
+        } else {
+          throw new Error(`Failed to verify token: ${athleteResponse.status} ${athleteResponse.statusText}`);
         }
-        throw new Error(`Failed to verify token: ${athleteResponse.status} ${athleteResponse.statusText}`);
-      }
-
-      const stravaAthlete = await athleteResponse.json();
-
-      // Save/update athlete in database (for future use)
-      if (stravaSync) {
-        try {
-          await stravaSync.saveAthlete(stravaAthlete);
-        } catch (dbError) {
-          console.warn('Failed to save athlete to database:', dbError);
+      } else {
+        // Token verification successful, save/update athlete in database
+        stravaAthlete = await athleteResponse.json();
+        if (stravaSync) {
+          try {
+            await stravaSync.saveAthlete(stravaAthlete);
+          } catch (dbError) {
+            console.warn('Failed to save athlete to database:', dbError);
+          }
         }
       }
 
@@ -63,7 +68,9 @@ export async function GET(request: NextRequest) {
 
       if (stravaSync) {
         try {
-          const dbAthlete = await stravaSync.getAthlete(stravaAthlete.id);
+          // Use athlete ID from cookie, or from stravaAthlete if available
+          const athleteIdToFetch = stravaAthlete?.id || athleteId;
+          const dbAthlete = await stravaSync.getAthlete(athleteIdToFetch);
           if (dbAthlete) {
             athlete = {
               id: dbAthlete.stravaId,
@@ -98,9 +105,14 @@ export async function GET(request: NextRequest) {
         }
       }
 
-      // Fallback to Strava data if not in database
-      if (!athlete) {
+      // Fallback to Strava data if not in database and we have it
+      if (!athlete && stravaAthlete) {
         athlete = stravaAthlete;
+      }
+
+      // If we still don't have athlete data and rate limit was hit, return an error
+      if (!athlete && rateLimitHit) {
+        return NextResponse.json({ error: 'Rate limit exceeded and no cached data available. Please try again later.' }, { status: 429 });
       }
 
 

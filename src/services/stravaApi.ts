@@ -121,57 +121,118 @@ export interface StravaStream {
   resolution: string;
 }
 
-// Rate limiter class to respect Strava API limits
-class StravaRateLimiter {
-  private requestTimes: number[] = [];
-  private readonly maxRequestsPer15Min = 100;
-  private readonly maxRequestsPerDay = 1000;
-  private readonly window15Min = 15 * 60 * 1000; // 15 minutes in ms
-  private readonly window24Hours = 24 * 60 * 60 * 1000; // 24 hours in ms
+// RateLimitManager class as specified in the background syncer spec
+class RateLimitManager {
+  private requestsThisWindow: number = 0;
+  private requestsToday: number = 0;
+  private currentWindow: Date;
+  private dailyResetTime: Date;
 
-  async waitForSlot(): Promise<void> {
+  constructor() {
+    this.currentWindow = this.getCurrentWindow();
+    this.dailyResetTime = this.getNextDailyReset();
+  }
+
+  getCurrentWindow(): Date {
+    const now = new Date();
+    const minutes = now.getMinutes();
+    const windowStart = Math.floor(minutes / 15) * 15;
+    now.setMinutes(windowStart, 0, 0);
+    return now;
+  }
+
+  getNextWindowReset(): Date {
+    const now = new Date();
+    const minutes = now.getMinutes();
+    const nextWindow = (Math.floor(minutes / 15) + 1) * 15;
+
+    if (nextWindow === 60) {
+      now.setHours(now.getHours() + 1, 0, 0, 0);
+    } else {
+      now.setMinutes(nextWindow, 0, 0);
+    }
+
+    return now;
+  }
+
+  getNextDailyReset(): Date {
+    const tomorrow = new Date();
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    tomorrow.setHours(0, 0, 0, 0);
+    return tomorrow;
+  }
+
+  async checkAndWait(): Promise<void> {
     if (USE_MOCK) return; // No rate limiting in mock mode
 
-    const now = Date.now();
+    const now = new Date();
 
-    // Clean old requests
-    this.requestTimes = this.requestTimes.filter(time => now - time < this.window24Hours);
+    // Check if we've entered a new 15-minute window
+    if (now >= this.getNextWindowReset()) {
+      this.requestsThisWindow = 0;
+      this.currentWindow = this.getCurrentWindow();
+    }
 
-    // Check 15-minute limit
-    const requestsIn15Min = this.requestTimes.filter(time => now - time < this.window15Min).length;
-    if (requestsIn15Min >= this.maxRequestsPer15Min) {
-      const oldestIn15Min = Math.min(...this.requestTimes.filter(time => now - time < this.window15Min));
-      const waitTime = this.window15Min - (now - oldestIn15Min);
+    // Check if we've entered a new day
+    if (now >= this.dailyResetTime) {
+      this.requestsToday = 0;
+      this.dailyResetTime = this.getNextDailyReset();
+    }
+
+    // Check if we're approaching the 15-minute limit
+    if (this.requestsThisWindow >= 95) {
+      const waitTime = this.getNextWindowReset().getTime() - now.getTime();
       if (waitTime > 0) {
-        console.log(`Rate limit: waiting ${Math.ceil(waitTime / 1000)}s for 15min window`);
-        await new Promise(resolve => setTimeout(resolve, waitTime));
+        console.log(`Rate limit approaching. Waiting ${Math.ceil(waitTime / 1000)}s until next window.`);
+        await this.sleep(waitTime + 1000); // Add 1 second buffer
+        this.requestsThisWindow = 0;
+        this.currentWindow = this.getCurrentWindow();
       }
     }
 
     // Check daily limit
-    if (this.requestTimes.length >= this.maxRequestsPerDay) {
-      const oldestRequest = Math.min(...this.requestTimes);
-      const waitTime = this.window24Hours - (now - oldestRequest);
+    if (this.requestsToday >= 950) {
+      const waitTime = this.dailyResetTime.getTime() - now.getTime();
       if (waitTime > 0) {
-        console.log(`Rate limit: waiting ${Math.ceil(waitTime / 1000)}s for daily window`);
-        await new Promise(resolve => setTimeout(resolve, waitTime));
+        console.log(`Daily limit approaching. Waiting ${Math.ceil(waitTime / 1000)}s until tomorrow.`);
+        await this.sleep(waitTime + 1000);
+        this.requestsToday = 0;
+        this.dailyResetTime = this.getNextDailyReset();
       }
     }
 
-    // Add small delay between requests to be safe (1 second)
-    if (this.requestTimes.length > 0) {
-      const lastRequest = Math.max(...this.requestTimes);
-      const timeSinceLast = now - lastRequest;
-      if (timeSinceLast < 1000) {
-        await new Promise(resolve => setTimeout(resolve, 1000 - timeSinceLast));
-      }
-    }
+    // Increment counters
+    this.requestsThisWindow++;
+    this.requestsToday++;
+  }
 
-    this.requestTimes.push(now);
+  sleep(ms: number): Promise<void> {
+    return new Promise((resolve) => setTimeout(resolve, ms));
+  }
+
+  // Method to pause sync strategically (2 minutes before reset)
+  shouldPauseBeforeReset(): boolean {
+    const now = new Date();
+    const nextReset = this.getNextWindowReset();
+    const timeUntilReset = nextReset.getTime() - now.getTime();
+
+    // Pause if less than 2 minutes until reset and we're near the limit
+    return timeUntilReset < 120000 && this.requestsThisWindow >= 90;
+  }
+
+  // Get current rate limit status
+  getStatus() {
+    return {
+      requestsThisWindow: this.requestsThisWindow,
+      requestsToday: this.requestsToday,
+      currentWindowStart: this.currentWindow,
+      nextWindowReset: this.getNextWindowReset(),
+      dailyResetTime: this.dailyResetTime,
+    };
   }
 
   async makeRequest<T>(url: string, options: RequestInit = {}): Promise<T> {
-    await this.waitForSlot();
+    await this.checkAndWait();
 
     if (USE_MOCK) {
       console.log(`[MOCK] Making request to: ${url}`);
@@ -348,7 +409,7 @@ class StravaRateLimiter {
   }
 }
 
-const rateLimiter = new StravaRateLimiter();
+const rateLimiter = new RateLimitManager();
 
 // API Functions
 export async function fetchAthlete(accessToken: string): Promise<StravaAthlete> {
@@ -403,4 +464,29 @@ export async function fetchActivityStreams(accessToken: string, activityId: numb
       'Authorization': `Bearer ${accessToken}`,
     },
   });
+}
+
+export async function fetchAllActivityIds(accessToken: string, before?: number): Promise<number[]> {
+  const allActivityIds: number[] = [];
+  let page = 1;
+  const perPage = 200; // Strava max
+
+  while (true) {
+    const activities = await fetchActivities(accessToken, page, perPage, undefined, before);
+
+    if (activities.length === 0) {
+      break; // No more activities
+    }
+
+    // Extract just the IDs
+    allActivityIds.push(...activities.map(activity => activity.id));
+
+    if (activities.length < perPage) {
+      break; // Last page
+    }
+
+    page++;
+  }
+  console.log("Total count of activities: ", allActivityIds.length)
+  return allActivityIds;
 }

@@ -88,7 +88,7 @@ export async function GET(request: NextRequest) {
         photo_count: 0, // Not stored in DB
         map: {
           id: `map_${activity.stravaId}`,
-          summary_polyline: null,
+          summary_polyline: undefined,
           resource_state: 2,
         },
       }));

@@ -26,6 +26,20 @@ export function useProfile(): UseProfileReturn {
         if (profileResponse.status === 401) {
           throw new Error('Authentication required');
         }
+        if (profileResponse.status === 429) {
+          // Rate limit hit - try to get data from response anyway (API may return cached data)
+          try {
+            const { athlete: athleteData, stats: statsData } = await profileResponse.json();
+            if (athleteData) {
+              setAthlete(athleteData);
+              setStats(statsData);
+              return;
+            }
+          } catch (parseError) {
+            // If parsing fails, throw rate limit error
+          }
+          throw new Error('Rate limit exceeded. Please try again later.');
+        }
         throw new Error('Failed to fetch profile');
       }
       const { athlete: athleteData, stats: statsData } = await profileResponse.json();
