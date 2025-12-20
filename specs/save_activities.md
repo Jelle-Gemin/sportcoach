@@ -282,34 +282,29 @@ On app startup:
 Transform Strava API response to MongoDB schema:
 
 ```javascript
-function mapStravaToMongo(stravaActivity, streams = {}) {
-  return {
-    stravaId: stravaActivity.id,
-    date: new Date(stravaActivity.start_date_local),
-    description: stravaActivity.description || stravaActivity.name,
-    type: stravaActivity.type,
-    averagePace: calculatePace(stravaActivity.average_speed),
-    maxPace: calculatePace(stravaActivity.max_speed),
-    movingTime: stravaActivity.moving_time,
-    elapsedTime: stravaActivity.elapsed_time,
-    avgCadence: stravaActivity.average_cadence,
-    avgHR: stravaActivity.average_heartrate,
-    maxHR: stravaActivity.max_heartrate,
-    laps: stravaActivity.laps || [],
-    streams: {
-      time: streams.time?.data || [],
-      distance: streams.distance?.data || [],
-      heartrate: streams.heartrate?.data || [],
-      pace: streams.pace?.data || [],
-      cadence: streams.cadence?.data || [],
-      watts: streams.watts?.data || [],
-      altitude: streams.altitude?.data || [],
-      latlng: streams.latlng?.data || [],
-    },
-    fetchedAt: new Date(),
-    lastUpdated: new Date(),
-  };
-}
+ private mapStravaToMongo(stravaActivity: StravaActivityDetail, streams: any): ActivityDocument {
+    return {
+      stravaId: stravaActivity.id,
+      name: stravaActivity.name,
+      date: new Date(stravaActivity.start_date_local),
+      description: stravaActivity.description || stravaActivity.name,
+      type: stravaActivity.type,
+      distance: stravaActivity.distance,
+      total_elevation_gain: stravaActivity.total_elevation_gain,
+      averagePace: this.calculatePace(stravaActivity.average_speed),
+      maxPace: this.calculatePace(stravaActivity.max_speed),
+      movingTime: stravaActivity.moving_time,
+      elapsedTime: stravaActivity.elapsed_time,
+      avgCadence: stravaActivity.average_cadence,
+      avgHR: stravaActivity.average_heartrate,
+      maxHR: stravaActivity.max_heartrate,
+      laps: stravaActivity.laps || [],
+      streams,
+      map: stravaActivity.map,
+      fetchedAt: new Date(),
+      lastUpdated: new Date(),
+    };
+  }
 
 function calculatePace(speedMps) {
   if (!speedMps || speedMps === 0) return "00:00";

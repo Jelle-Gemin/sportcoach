@@ -6,6 +6,7 @@ import { MongoClient, Db, Collection } from 'mongodb';
 interface ActivityDocument {
   _id?: any;
   stravaId: number;
+  name: string;
   date: Date;
   description?: string;
   type: string;
@@ -19,6 +20,11 @@ interface ActivityDocument {
   avgHR?: number;
   maxHR?: number;
   laps?: any[];
+    map: {
+    id: string;
+    summary_polyline?: string;
+    resource_state: number;
+  };
   streams?: {
     time?: number[];
     distance?: number[];
@@ -572,10 +578,58 @@ export class StravaSync {
           );
 
         } catch (error) {
-          console.error(`Failed to process activity ${activityId}:`, error);
-          errors.push({ activityId: activityId, error: error instanceof Error ? error.message : String(error) });
-          // Keep failed activity in the list for retry - don't remove it
-          activitiesToSync.shift(); // Still remove it to avoid infinite loop, but log the error
+          if (error instanceof RateLimitError) {
+            // Rate limit hit - pause sync and wait for reset, then retry this activity
+            console.log(`Rate limit hit while processing activity ${activityId}. Pausing sync to wait for reset.`);
+
+            // Update metadata to indicate rate limit pause
+            await this.syncMetadataCollection.updateOne(
+              { type: 'strava_sync' },
+              {
+                $set: {
+                  continuous_sync_status: 'paused',
+                  last_error: {
+                    timestamp: new Date(),
+                    message: `Rate limit hit while processing activity ${activityId}. Waiting for reset.`,
+                    activityId: activityId,
+                  },
+                  'continuous_sync_progress.lastProcessedActivityId': activityId,
+                }
+              }
+            );
+
+            // Calculate wait time based on rate limit error or default to 15 minutes
+            const waitTimeMs = error.retryAfter ? error.retryAfter * 1000 : 15 * 60 * 1000; // 15 minutes default
+            console.log(`Waiting ${Math.ceil(waitTimeMs / 1000)} seconds for rate limit reset...`);
+
+            // Wait for rate limit reset
+            await this.sleep(waitTimeMs);
+
+            // After waiting, reset rate limit counters and resume sync
+            console.log(`Rate limit reset period passed. Resuming sync from activity ${activityId}.`);
+
+            // Update status back to syncing
+            await this.syncMetadataCollection.updateOne(
+              { type: 'strava_sync' },
+              {
+                $set: {
+                  continuous_sync_status: 'syncing',
+                  last_error: undefined,
+                }
+              }
+            );
+
+            // Don't remove the activity from the list - it will be retried in the next iteration
+            // Continue the loop to retry this activity
+            continue;
+
+          } else {
+            // Other error - log and remove from list
+            console.error(`Failed to process activity ${activityId}:`, error);
+            errors.push({ activityId: activityId, error: error instanceof Error ? error.message : String(error) });
+            // Remove failed activity to avoid infinite loop
+            activitiesToSync.shift();
+          }
         }
       }
 
@@ -856,6 +910,10 @@ export class StravaSync {
     this.lastApiCall = Date.now();
   }
 
+  private async sleep(ms: number): Promise<void> {
+    return new Promise(resolve => setTimeout(resolve, ms));
+  }
+
   private async fetchWithRateLimit<T>(fn: () => Promise<T>): Promise<T> {
     await this.rateLimitDelay();
     return fn();
@@ -864,6 +922,7 @@ export class StravaSync {
   private mapStravaToMongo(stravaActivity: StravaActivityDetail, streams: any): ActivityDocument {
     return {
       stravaId: stravaActivity.id,
+      name: stravaActivity.name,
       date: new Date(stravaActivity.start_date_local),
       description: stravaActivity.description || stravaActivity.name,
       type: stravaActivity.type,
@@ -878,6 +937,7 @@ export class StravaSync {
       maxHR: stravaActivity.max_heartrate,
       laps: stravaActivity.laps || [],
       streams,
+      map: stravaActivity.map,
       fetchedAt: new Date(),
       lastUpdated: new Date(),
     };

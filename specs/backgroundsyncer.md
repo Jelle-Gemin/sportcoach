@@ -139,135 +139,276 @@ Fetch all historical activities older than the oldest activity currently in the 
 ```
 Continuous Sync Process:
 1. User initiates sync
-2. Get oldest activity timestamp from database
-3. Query Strava for ALL activities before that timestamp
-4. Process activities in batches, respecting rate limits
+2. Fetches the ids of all the activities the user has. (useTotalActivities hook)
+3. Filter out the activities that are already in the database (based on stravaId) --> activitiesToSync variable
 5. For each activity:
+   â†' Check rate limit before details/streams call
    â†' Fetch detailed activity data
    â†' Fetch streams data
    â†' Save to database
-6. Check if more activities exist
-7. If yes, repeat from step 3
-8. If no, mark as fully_synced
+   â†' Remove synced activity from the activitesToSync list
+6. Keep going until activitiesToSync === 0
 ```
+
+> NOTE: If the rate limit is hit, it should save which call and which activity. After the rate limit delay has reset it should do the same call again and go onward.
 
 ### Detailed Algorithm
 
 ```javascript
-async function continuousHistoricalSync(userId) {
-  updateSyncStatus(userId, "syncing");
+  async continuousHistoricalSync(accessToken: string): Promise<{
+    success: boolean;
+    syncedCount: number;
+    completed: boolean;
+    errors: Array<{ activityId: number; error: string }>;
+  }> {
+    try {
+      console.log('Starting continuous historical sync');
 
-  try {
-    while (true) {
-      // 1. Get oldest activity in database
-      const oldestActivity = await getOldestLocalActivity(userId);
-
-      if (!oldestActivity) {
-        // No activities in database - should not happen after initial sync
-        throw new Error("No activities found for continuous sync");
+      // Get sync metadata
+      let metadata: SyncMetadataDocument | null = await this.syncMetadataCollection.findOne({ type: 'strava_sync' });
+      if (!metadata) {
+        // Create default metadata if none exists
+        metadata = {
+          type: 'strava_sync',
+          strava_sync_status: 'not_started',
+          strava_last_sync_check: new Date(0),
+          strava_newest_activity_date: undefined,
+          strava_oldest_activity_date: undefined,
+          total_activities_count: 0,
+          has_older_activities: false,
+          continuous_sync_status: 'not_started',
+          continuous_sync_started_at: undefined,
+          continuous_sync_progress: undefined,
+          rate_limit_info: undefined,
+          last_error: undefined,
+        };
+        await this.syncMetadataCollection.insertOne(metadata);
       }
 
-      const beforeTimestamp = oldestActivity.date.getTime() / 1000; // Unix timestamp
+      // Check if continuous sync is already running or completed
+      if (metadata.continuous_sync_status === 'completed') {
+        console.log('Continuous sync already completed');
+        return { success: true, syncedCount: 0, completed: true, errors: [] };
+      }
 
-      // 2. Fetch ALL activities older than oldest local activity
-      const olderActivities = await fetchAllActivitiesBeforeTimestamp(
-        beforeTimestamp,
-        userId
+      if (metadata.continuous_sync_status === 'syncing') {
+        console.log('Continuous sync already running');
+        return { success: false, syncedCount: 0, completed: false, errors: [{ activityId: 0, error: 'Sync already running' }] };
+      }
+
+      // Update status to syncing
+      await this.syncMetadataCollection.updateOne(
+        { type: 'strava_sync' },
+        {
+          $set: {
+            continuous_sync_status: 'syncing',
+            continuous_sync_started_at: new Date(),
+            continuous_sync_progress: {
+              totalActivitiesFound: 0,
+              activitiesProcessed: 0,
+              currentBatchStart: undefined,
+              estimatedCompletion: undefined,
+              lastProcessedActivityId: metadata.continuous_sync_progress?.lastProcessedActivityId || 0,
+            },
+            last_error: undefined
+          }
+        }
       );
 
-      if (olderActivities.length === 0) {
-        // No more older activities exist on Strava
-        updateSyncStatus(userId, "fully_synced");
-        break;
+      let totalSynced = 0;
+      const errors: Array<{ activityId: number; error: string }> = [];
+
+      // Fetch all activity IDs from Strava
+      console.log('Fetching all activity IDs from Strava...');
+      const allActivityIds = await fetchAllActivityIds(accessToken);
+      console.log(`Found ${allActivityIds.length} total activities on Strava`);
+
+      // Get all activity IDs already in the database
+      const existingActivities = await this.activitiesCollection.find({}, { projection: { stravaId: 1 } }).toArray();
+      const existingActivityIds = new Set(existingActivities.map(activity => activity.stravaId));
+      console.log(`Found ${existingActivityIds.size} activities already in database`);
+
+      // Filter out activities already in the database
+      const activitiesToSync = allActivityIds.filter(id => !existingActivityIds.has(id));
+      console.log(`Need to sync ${activitiesToSync.length} activities`);
+
+      if (activitiesToSync.length === 0) {
+        console.log('All activities are already synced');
+        // Mark continuous sync as completed
+        await this.syncMetadataCollection.updateOne(
+          { type: 'strava_sync' },
+          {
+            $set: {
+              continuous_sync_status: 'completed',
+              strava_sync_status: 'fully_synced',
+              strava_last_sync_check: new Date(),
+              'continuous_sync_progress.totalActivitiesFound': allActivityIds.length,
+              'continuous_sync_progress.activitiesProcessed': 0,
+              'continuous_sync_progress.estimatedCompletion': new Date(),
+              rate_limit_info: this.rateLimitManager.getRateLimitInfo(),
+            }
+          }
+        );
+        return { success: true, syncedCount: 0, completed: true, errors: [] };
       }
 
-      // 3. Process activities in batches
-      await processBatchWithRateLimits(olderActivities, userId);
+      // Update progress with total activities found
+      await this.syncMetadataCollection.updateOne(
+        { type: 'strava_sync' },
+        {
+          $set: {
+            'continuous_sync_progress.totalActivitiesFound': allActivityIds.length,
+            rate_limit_info: this.rateLimitManager.getRateLimitInfo(),
+          }
+        }
+      );
 
-      // 4. Update progress
-      await updateSyncProgress(userId, olderActivities.length);
-    }
+      // Process activities one by one, removing from activitiesToSync after successful sync
+      while (activitiesToSync.length > 0) {
+        // Check if sync should be paused
+        const metadata = await this.syncMetadataCollection.findOne({ type: 'strava_sync' });
+        if (metadata?.continuous_sync_status === 'paused') {
+          console.log('Sync paused by user during activity processing');
+          return { success: true, syncedCount: totalSynced, completed: false, errors };
+        }
 
-    // Final status update
-    updateLastSyncCheck(userId, new Date());
-  } catch (error) {
-    updateSyncStatus(userId, "error");
-    logError(userId, error);
-  }
-}
-```
+        const activityId = activitiesToSync[0]; // Take the first activity
 
-### Fetching All Activities Before Timestamp
+        try {
+          // Check rate limit before each detail fetch
+          await this.rateLimitManager.checkAndWait();
+          const activityDetail = await fetchActivityDetail(accessToken, activityId);
 
-```javascript
-async function fetchAllActivitiesBeforeTimestamp(beforeTimestamp, userId) {
-  const allActivities = [];
-  let page = 1;
-  const perPage = 200; // Strava max
+          // Fetch streams data for graphs (heartrate, pace, cadence, etc.)
+          await this.rateLimitManager.checkAndWait();
+          const streams = await fetchActivityStreams(accessToken, activityId, ['time', 'distance', 'heartrate', 'cadence', 'watts', 'altitude', 'latlng']);
 
-  while (true) {
-    // Check rate limit before request
-    await checkAndWaitForRateLimit();
+          const activityDoc = this.mapStravaToMongo(activityDetail, streams);
 
-    const activities = await fetch(
-      `https://www.strava.com/api/v3/athlete/activities?before=${beforeTimestamp}&per_page=${perPage}&page=${page}`,
-      {
-        headers: {
-          Authorization: `Bearer ${accessToken}`,
-        },
+          await this.activitiesCollection.updateOne(
+            { stravaId: activityId },
+            { $set: activityDoc },
+            { upsert: true }
+          );
+
+          // Successfully synced, remove from activitiesToSync
+          activitiesToSync.shift(); // Remove the first element
+          totalSynced++;
+
+          // Update progress
+          await this.syncMetadataCollection.updateOne(
+            { type: 'strava_sync' },
+            {
+              $inc: { 'continuous_sync_progress.activitiesProcessed': 1 },
+              $set: {
+                'continuous_sync_progress.lastProcessedActivityId': activityId,
+                total_activities_count: await this.activitiesCollection.countDocuments(),
+              }
+            }
+          );
+
+        } catch (error) {
+          if (error instanceof RateLimitError) {
+            // Rate limit hit - pause sync and wait for reset, then retry this activity
+            console.log(`Rate limit hit while processing activity ${activityId}. Pausing sync to wait for reset.`);
+
+            // Update metadata to indicate rate limit pause
+            await this.syncMetadataCollection.updateOne(
+              { type: 'strava_sync' },
+              {
+                $set: {
+                  continuous_sync_status: 'paused',
+                  last_error: {
+                    timestamp: new Date(),
+                    message: `Rate limit hit while processing activity ${activityId}. Waiting for reset.`,
+                    activityId: activityId,
+                  },
+                  'continuous_sync_progress.lastProcessedActivityId': activityId,
+                }
+              }
+            );
+
+            // Calculate wait time based on rate limit error or default to 15 minutes
+            const waitTimeMs = error.retryAfter ? error.retryAfter * 1000 : 15 * 60 * 1000; // 15 minutes default
+            console.log(`Waiting ${Math.ceil(waitTimeMs / 1000)} seconds for rate limit reset...`);
+
+            // Wait for rate limit reset
+            await this.sleep(waitTimeMs);
+
+            // After waiting, reset rate limit counters and resume sync
+            console.log(`Rate limit reset period passed. Resuming sync from activity ${activityId}.`);
+
+            // Update status back to syncing
+            await this.syncMetadataCollection.updateOne(
+              { type: 'strava_sync' },
+              {
+                $set: {
+                  continuous_sync_status: 'syncing',
+                  last_error: undefined,
+                }
+              }
+            );
+
+            // Don't remove the activity from the list - it will be retried in the next iteration
+            // Continue the loop to retry this activity
+            continue;
+
+          } else {
+            // Other error - log and remove from list
+            console.error(`Failed to process activity ${activityId}:`, error);
+            errors.push({ activityId: activityId, error: error instanceof Error ? error.message : String(error) });
+            // Remove failed activity to avoid infinite loop
+            activitiesToSync.shift();
+          }
+        }
       }
-    );
 
-    if (activities.length === 0) {
-      break; // No more activities
-    }
+      // Mark continuous sync as completed
+      await this.syncMetadataCollection.updateOne(
+        { type: 'strava_sync' },
+        {
+          $set: {
+            continuous_sync_status: 'completed',
+            strava_sync_status: 'fully_synced',
+            strava_last_sync_check: new Date(),
+            'continuous_sync_progress.estimatedCompletion': new Date(),
+            rate_limit_info: this.rateLimitManager.getRateLimitInfo(),
+          }
+        }
+      );
 
-    allActivities.push(...activities);
+      console.log(`Continuous sync completed: ${totalSynced} activities synced`);
 
-    if (activities.length < perPage) {
-      break; // Last page
-    }
+      return {
+        success: true,
+        syncedCount: totalSynced,
+        completed: true,
+        errors
+      };
 
-    page++;
-  }
-
-  return allActivities;
-}
-```
-
-### Batch Processing with Rate Limits
-
-```javascript
-async function processBatchWithRateLimits(activities, userId) {
-  const BATCH_SIZE = 10; // Process 10 activities at a time
-  const MAX_REQUESTS_PER_WINDOW = 95; // Safety buffer
-
-  for (let i = 0; i < activities.length; i += BATCH_SIZE) {
-    const batch = activities.slice(i, i + BATCH_SIZE);
-
-    for (const activity of batch) {
-      // Check if we need to wait for rate limit reset
-      await checkAndWaitForRateLimit();
-
-      // Fetch detailed activity
-      const details = await fetchActivityDetails(activity.id);
-
-      await checkAndWaitForRateLimit();
-
-      // Fetch streams
-      const streams = await fetchActivityStreams(activity.id);
-
-      // Save to database
-      await saveActivityToDatabase(userId, details, streams);
-
-      // Update progress in real-time
-      await updateProgressUI(userId, {
-        processed: i + batch.indexOf(activity) + 1,
-        total: activities.length,
-      });
+    } catch (error) {
+      console.error('Continuous sync failed:', error);
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      await this.syncMetadataCollection.updateOne(
+        { type: 'strava_sync' },
+        {
+          $set: {
+            continuous_sync_status: 'error',
+            last_error: {
+              timestamp: new Date(),
+              message: errorMessage,
+            }
+          }
+        }
+      );
+      return {
+        success: false,
+        syncedCount: 0,
+        completed: false,
+        errors: [{ activityId: 0, error: errorMessage }]
+      };
     }
   }
-}
 ```
 
 ### Rate Limit Manager
