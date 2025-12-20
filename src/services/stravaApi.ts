@@ -98,6 +98,7 @@ export interface StravaActivity {
     summary_polyline?: string;
     resource_state: number;
   };
+  average_cadence?: number;
 }
 
 export interface StravaActivityDetail extends StravaActivity {

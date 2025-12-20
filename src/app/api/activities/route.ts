@@ -74,13 +74,13 @@ export async function GET(request: NextRequest) {
         start_date: activity.date.toISOString(),
         start_date_local: activity.date.toISOString(),
         timezone: 'UTC',
-        average_speed: 0, // Not stored in DB
-        max_speed: 0, // Not stored in DB
+        average_speed: activity.average_speed || 0,
+        max_speed: activity.max_speed || 0,
         has_heartrate: !!(activity.avgHR || activity.maxHR),
         average_heartrate: activity.avgHR,
         max_heartrate: activity.maxHR,
-        elev_high: 0, // Not stored in DB
-        elev_low: 0, // Not stored in DB
+        elev_high: activity.elev_high, 
+        elev_low: activity.elev_low, 
         achievement_count: 0, // Not stored in DB
         kudos_count: 0, // Not stored in DB
         comment_count: 0, // Not stored in DB

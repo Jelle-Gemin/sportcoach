@@ -10,8 +10,27 @@ interface ActivityDocument {
   date: Date;
   description?: string;
   type: string;
+  sport_type?: string;
   distance?: number;
+  moving_time: number;
+  elapsed_time: number;
   total_elevation_gain?: number;
+  elev_low: number;
+  elev_high: number;
+  average_speed?: number;
+  max_speed?: number;
+  has_heartrate?: boolean;
+  average_heartrate?: number;
+  max_heartrate?: number;
+  average_cadence?: number;
+  achievement_count?: number;
+  kudos_count?: number;
+  comment_count?: number;
+  athlete_count?: number;
+  photo_count?: number;
+  start_date?: string;
+  start_date_local?: string;
+  timezone?: string;
   averagePace?: string;
   maxPace?: string;
   movingTime: number;
@@ -20,7 +39,14 @@ interface ActivityDocument {
   avgHR?: number;
   maxHR?: number;
   laps?: any[];
-    map: {
+  photos?: any[];
+  calories?: number;
+  segment_efforts?: any[];
+  device_name?: string;
+  embed_token?: string;
+  splits_metric?: any[];
+  splits_standard?: any[];
+  map: {
     id: string;
     summary_polyline?: string;
     resource_state: number;
@@ -680,210 +706,6 @@ export class StravaSync {
     }
   }
 
-  async syncActivities(accessToken: string): Promise<{
-    success: boolean;
-    syncedCount: number;
-    skippedCount: number;
-    newActivities: number;
-    errors: Array<{ activityId: number; error: string }>;
-    completed: boolean;
-  }> {
-    try {
-      // Get sync metadata
-      let metadata: SyncMetadataDocument | null = await this.syncMetadataCollection.findOne({ type: 'strava_sync' });
-      if (!metadata) {
-        metadata = {
-          type: 'strava_sync',
-          strava_sync_status: 'not_started',
-          strava_last_sync_check: new Date(0),
-          strava_newest_activity_date: undefined,
-          strava_oldest_activity_date: undefined,
-          total_activities_count: 0,
-          has_older_activities: false,
-          continuous_sync_status: 'not_started',
-          continuous_sync_started_at: undefined,
-          continuous_sync_progress: undefined,
-          rate_limit_info: undefined,
-          last_error: undefined,
-          // Legacy fields
-          lastSyncDate: new Date(0),
-          lastActivityId: 0,
-          fetchedActivityIds: [],
-          syncStatus: 'idle',
-          stats: {
-            totalActivities: 0,
-            lastSyncCount: 0,
-            failedFetches: 0,
-          },
-        };
-      }
-
-      // Update status to in_progress
-      await this.syncMetadataCollection.updateOne(
-        { type: 'strava_sync' },
-        { $set: { syncStatus: 'in_progress', errorMessage: undefined } }
-      );
-
-      let syncedCount = 0;
-      let skippedCount = 0;
-      let newActivities = 0;
-      const errors: Array<{ activityId: number; error: string }> = [];
-
-      // Always perform backward sync starting from the oldest activity in the database
-      let currentBefore: number | undefined;
-
-      if (metadata.currentBeforeTimestamp) {
-        // Resume from where we left off due to rate limit
-        currentBefore = metadata.currentBeforeTimestamp;
-        console.log(`Resuming backward sync from timestamp: ${currentBefore}`);
-      } else {
-        // Start from oldest activity in database to fetch activities before it
-        const oldestActivity = await this.activitiesCollection.findOne({}, { sort: { date: 1 } });
-        if (oldestActivity) {
-          currentBefore = Math.floor(oldestActivity.date.getTime() / 1000);
-          console.log(`Starting backward sync from oldest activity: ${oldestActivity.date.toISOString()}`);
-        } else {
-          // No activities in DB, start from current time and work backwards
-          currentBefore = Math.floor(Date.now() / 1000);
-          console.log('No activities in DB, starting backward sync from current time');
-        }
-      }
-
-      const batchSize = 10;
-      let hasMoreActivities = true;
-      let rateLimitHit = false;
-
-      while (hasMoreActivities && !rateLimitHit) {
-        try {
-          // Fetch activities before current timestamp (backward in time)
-          const activities: any[] = await fetchActivities(accessToken, 1, 30, undefined, currentBefore);
-
-          if (activities.length === 0) {
-            hasMoreActivities = false;
-            break;
-          }
-
-          // Process activities in batches
-          for (let i = 0; i < activities.length; i += batchSize) {
-            const batch = activities.slice(i, i + batchSize);
-
-            const batchPromises = batch.map(async (activity) => {
-              try {
-                const shouldFetch = await this.shouldFetchActivity(activity.id);
-                if (!shouldFetch) {
-                  skippedCount++;
-                  return;
-                }
-
-                const activityDetail = await fetchActivityDetail(accessToken, activity.id);
-
-                // Skip stream fetching to minimize API calls - streams can be fetched on-demand if needed
-                const streams: any = {};
-
-                const activityDoc = this.mapStravaToMongo(activityDetail, streams);
-
-                await this.activitiesCollection.updateOne(
-                  { stravaId: activity.id },
-                  { $set: activityDoc },
-                  { upsert: true }
-                );
-
-                syncedCount++;
-                newActivities++;
-
-                // Update fetchedActivityIds
-                await this.syncMetadataCollection.updateOne(
-                  { type: 'strava_sync' },
-                  { $addToSet: { fetchedActivityIds: activity.id } }
-                );
-
-              } catch (error) {
-                console.error(`Failed to process activity ${activity.id}:`, error);
-                errors.push({ activityId: activity.id, error: error instanceof Error ? error.message : String(error) });
-              }
-            });
-
-            await Promise.all(batchPromises);
-
-            // Update current position for rate limit recovery
-            const lastActivity = batch[batch.length - 1];
-            currentBefore = Math.floor(new Date(lastActivity.start_date).getTime() / 1000);
-
-            // Save current position
-            await this.syncMetadataCollection.updateOne(
-              { type: 'strava_sync' },
-              { $set: { currentBeforeTimestamp: currentBefore } }
-            );
-          }
-
-          // Move to next batch of activities (backward in time)
-          const lastActivity = activities[activities.length - 1];
-          currentBefore = Math.floor(new Date(lastActivity.start_date).getTime() / 1000) - 1; // -1 to avoid duplicates
-
-        } catch (error) {
-          if (error instanceof RateLimitError) {
-            console.log('Rate limit hit, jumping back 50 days to continue backward sync');
-            // Jump back 50 days (50 * 24 * 60 * 60 seconds)
-            currentBefore = currentBefore! - (50 * 24 * 60 * 60);
-            rateLimitHit = true;
-
-            // Save the new position for resumption
-            await this.syncMetadataCollection.updateOne(
-              { type: 'strava_sync' },
-              { $set: { currentBeforeTimestamp: currentBefore } }
-            );
-          } else {
-            throw error;
-          }
-        }
-      }
-
-      // Update sync metadata
-      const newLastSyncDate = new Date();
-      await this.syncMetadataCollection.updateOne(
-        { type: 'strava_sync' },
-        {
-          $set: {
-            lastSyncDate: newLastSyncDate,
-            syncStatus: rateLimitHit ? 'rate_limited' : 'idle',
-            currentBeforeTimestamp: rateLimitHit ? currentBefore : undefined,
-            currentAfterTimestamp: undefined, // No longer used for backward sync
-            stats: {
-              totalActivities: await this.activitiesCollection.countDocuments(),
-              lastSyncCount: syncedCount,
-              failedFetches: errors.length,
-            },
-          },
-        }
-      );
-
-      return {
-        success: !rateLimitHit,
-        syncedCount,
-        skippedCount,
-        newActivities,
-        errors,
-        completed: !hasMoreActivities,
-      };
-
-    } catch (error) {
-      console.error('Sync failed:', error);
-      const errorMessage = error instanceof Error ? error.message : String(error);
-      await this.syncMetadataCollection.updateOne(
-        { type: 'strava_sync' },
-        { $set: { syncStatus: 'error', errorMessage } }
-      );
-      return {
-        success: false,
-        syncedCount: 0,
-        skippedCount: 0,
-        newActivities: 0,
-        errors: [{ activityId: 0, error: errorMessage }],
-        completed: false,
-      };
-    }
-  }
-
   private async shouldFetchActivity(activityId: number): Promise<boolean> {
     // Check if activity exists in database - if it does, don't refetch to maximize DB usage
     const existing = await this.activitiesCollection.findOne({ stravaId: activityId });
@@ -914,10 +736,7 @@ export class StravaSync {
     return new Promise(resolve => setTimeout(resolve, ms));
   }
 
-  private async fetchWithRateLimit<T>(fn: () => Promise<T>): Promise<T> {
-    await this.rateLimitDelay();
-    return fn();
-  }
+
 
   private mapStravaToMongo(stravaActivity: StravaActivityDetail, streams: any): ActivityDocument {
     return {
@@ -926,8 +745,27 @@ export class StravaSync {
       date: new Date(stravaActivity.start_date_local),
       description: stravaActivity.description || stravaActivity.name,
       type: stravaActivity.type,
+      sport_type: stravaActivity.sport_type,
       distance: stravaActivity.distance,
+      moving_time: stravaActivity.moving_time,
+      elapsed_time: stravaActivity.elapsed_time,
       total_elevation_gain: stravaActivity.total_elevation_gain,
+      elev_low: stravaActivity.elev_low,
+      elev_high: stravaActivity.elev_high,
+      average_speed: stravaActivity.average_speed,
+      max_speed: stravaActivity.max_speed,
+      has_heartrate: stravaActivity.has_heartrate,
+      average_heartrate: stravaActivity.average_heartrate,
+      max_heartrate: stravaActivity.max_heartrate,
+      average_cadence: stravaActivity.average_cadence,
+      achievement_count: stravaActivity.achievement_count,
+      kudos_count: stravaActivity.kudos_count,
+      comment_count: stravaActivity.comment_count,
+      athlete_count: stravaActivity.athlete_count,
+      photo_count: stravaActivity.photo_count,
+      start_date: stravaActivity.start_date,
+      start_date_local: stravaActivity.start_date_local,
+      timezone: stravaActivity.timezone,
       averagePace: this.calculatePace(stravaActivity.average_speed),
       maxPace: this.calculatePace(stravaActivity.max_speed),
       movingTime: stravaActivity.moving_time,
@@ -936,6 +774,13 @@ export class StravaSync {
       avgHR: stravaActivity.average_heartrate,
       maxHR: stravaActivity.max_heartrate,
       laps: stravaActivity.laps || [],
+      photos: stravaActivity.photos || [],
+      calories: stravaActivity.calories,
+      segment_efforts: stravaActivity.segment_efforts || [],
+      device_name: stravaActivity.device_name,
+      embed_token: stravaActivity.embed_token,
+      splits_metric: stravaActivity.splits_metric || [],
+      splits_standard: stravaActivity.splits_standard || [],
       streams,
       map: stravaActivity.map,
       fetchedAt: new Date(),
@@ -1051,16 +896,7 @@ export class StravaSync {
     return await this.athletesCollection.findOne({ stravaId });
   }
 
-  async getAthleteWithStats(stravaId: number): Promise<{ athlete: AthleteDocument; stats: any } | null> {
-    const athlete = await this.getAthlete(stravaId);
-    if (!athlete) return null;
 
-    // Get athlete stats from Strava API (since stats are not stored in DB)
-    // This would need to be implemented if we want to cache stats too
-    // For now, we'll return the athlete and indicate stats need to be fetched separately
-
-    return { athlete, stats: null };
-  }
 
   async pauseContinuousSync(): Promise<{
     success: boolean;
