@@ -1,5 +1,6 @@
 import { StravaActivity } from '@/services/stravaApi';
 import React from 'react';
+import { useRouter } from 'next/navigation';
 
 interface ActivityCardProps {
   activity: StravaActivity;
@@ -7,6 +8,8 @@ interface ActivityCardProps {
 }
 
 export function ActivityCard({ activity, onClick }: ActivityCardProps) {
+  const router = useRouter();
+
   const formatDistance = (meters: number): string => {
     const km = meters / 1000;
     return `${km.toFixed(1)}km`;
@@ -64,6 +67,9 @@ export function ActivityCard({ activity, onClick }: ActivityCardProps) {
   const handleClick = () => {
     if (onClick) {
       onClick(activity.id);
+    } else {
+      // Default navigation to activity detail page
+      router.push(`/activities/${activity.id}`);
     }
   };
 

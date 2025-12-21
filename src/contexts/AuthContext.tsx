@@ -125,7 +125,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
 
     setUser(null);
     setAccessToken(null);
-    router.push('/login');
+    router.push('/');
   };
 
   const refreshToken = async () => {
