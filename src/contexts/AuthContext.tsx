@@ -81,6 +81,19 @@ export function AuthProvider({ children }: AuthProviderProps) {
         console.log("Data", data)
         setUser(data.athlete);
         setAccessToken(data.accessToken);
+
+        // Trigger background sync when user is authenticated
+        try {
+          await fetch('/api/sync/inital', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ mode: 'initial' }),
+          });
+        } catch (syncError) {
+          console.error('Failed to trigger background sync:', syncError);
+        }
       }
     } catch (error) {
       console.error('Failed to check auth status:', error);

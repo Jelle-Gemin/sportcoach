@@ -10,36 +10,36 @@ interface UseActivitiesReturn {
   refetch: () => Promise<void>;
 }
 
-export function useActivities(initialPage: number = 1, perPage: number = 30): UseActivitiesReturn {
+export function useActivities(initialOffset: number = 0, perPage: number = 30, enabled: boolean = true): UseActivitiesReturn {
   const [activities, setActivities] = useState<StravaActivity[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [page, setPage] = useState(initialPage);
+  const [offset, setOffset] = useState(initialOffset);
   const [hasMore, setHasMore] = useState(true);
 
-  const fetchActivities = async (pageNum: number, append: boolean = false) => {
+  const fetchActivities = async (offsetNum: number, append: boolean = false) => {
     try {
       if (!append) {
         setLoading(true);
       }
       setError(null);
 
-      const response = await fetch(`/api/activities?page=${pageNum}&per_page=${perPage}`);
+      const response = await fetch(`/api/activities?limit=${perPage}&offset=${offsetNum}`);
 
       if (!response.ok) {
         throw new Error('Failed to fetch activities');
       }
 
-      const newActivities = await response.json();
+      const data = await response.json();
 
       if (append) {
-        setActivities(prev => [...prev, ...newActivities]);
+        setActivities(prev => [...prev, ...data.activities]);
       } else {
-        setActivities(newActivities);
+        setActivities(data.activities);
       }
 
-      // If we got fewer activities than requested, we've reached the end
-      setHasMore(newActivities.length === perPage);
+      // Use hasMore from API response
+      setHasMore(data.hasMore);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'An error occurred');
     } finally {
@@ -49,20 +49,22 @@ export function useActivities(initialPage: number = 1, perPage: number = 30): Us
 
   const loadMore = async () => {
     if (!loading && hasMore) {
-      const nextPage = page + 1;
-      setPage(nextPage);
-      await fetchActivities(nextPage, true);
+      const nextOffset = offset + perPage;
+      setOffset(nextOffset);
+      await fetchActivities(nextOffset, true);
     }
   };
 
   const refetch = async () => {
-    setPage(1);
-    await fetchActivities(1, false);
+    setOffset(0);
+    await fetchActivities(0, false);
   };
 
   useEffect(() => {
-    fetchActivities(1, false);
-  }, []);
+    if (enabled) {
+      fetchActivities(0, false);
+    }
+  }, [enabled]);
 
   return {
     activities,

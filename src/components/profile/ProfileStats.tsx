@@ -9,6 +9,10 @@ interface ProfileStatsProps {
 type TimePeriod = 'recent' | 'ytd' | 'all';
 
 export function ProfileStats({ stats, measurementPreference }: ProfileStatsProps) {
+  if (!stats) {
+    return null;
+  }
+
   const [activeTab, setActiveTab] = useState<TimePeriod>('recent');
 
   const formatDistance = (meters: number): string => {
@@ -38,9 +42,11 @@ export function ProfileStats({ stats, measurementPreference }: ProfileStatsProps
     return `${Math.round(meters)}m`;
   };
 
-  const getActivityStats = (type: 'ride' | 'run' | 'swim'): StatTotals => {
+  const getActivityStats = (type: 'ride' | 'run' | 'swim' | 'workout'): StatTotals => {
     const prefix = activeTab === 'recent' ? 'recent_' : activeTab === 'ytd' ? 'ytd_' : 'all_';
-    return stats[`${prefix}${type}_totals` as keyof AthleteStats] as StatTotals;
+    const key = `${prefix}${type}_totals` as keyof AthleteStats;
+    const activityStats = stats[key] as StatTotals | undefined;
+    return activityStats || { count: 0, distance: 0, moving_time: 0, elapsed_time: 0, elevation_gain: 0 };
   };
 
   const tabs = [
@@ -53,6 +59,7 @@ export function ProfileStats({ stats, measurementPreference }: ProfileStatsProps
     { type: 'ride' as const, icon: '🚴', label: 'Rides' },
     { type: 'run' as const, icon: '🏃', label: 'Runs' },
     { type: 'swim' as const, icon: '🏊', label: 'Swims' },
+    { type: 'workout' as const, icon: '💪', label: 'Workouts' },
   ];
 
   return (
@@ -77,7 +84,7 @@ export function ProfileStats({ stats, measurementPreference }: ProfileStatsProps
       </div>
 
       {/* Stats Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
         {activities.map(({ type, icon, label }) => {
           const activityStats = getActivityStats(type);
 
@@ -113,10 +120,10 @@ export function ProfileStats({ stats, measurementPreference }: ProfileStatsProps
         <div className="mt-6 pt-6 border-t border-gray-200">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-base">
             <div className="text-gray-700">
-              <span className="font-medium text-gray-900">Longest Ride:</span> <span className="font-bold text-lg text-gray-900">{formatDistance(stats.biggest_ride_distance)}</span>
+              <span className="font-medium text-gray-900">Longest Ride:</span> <span className="font-bold text-lg text-gray-900">{formatDistance(stats.biggest_ride_distance || 0)}</span>
             </div>
             <div className="text-gray-700">
-              <span className="font-medium text-gray-900">Biggest Climb:</span> <span className="font-bold text-lg text-gray-900">{formatElevation(stats.biggest_climb_elevation_gain)}</span>
+              <span className="font-medium text-gray-900">Biggest Climb:</span> <span className="font-bold text-lg text-gray-900">{formatElevation(stats.biggest_climb_elevation_gain || 0)}</span>
             </div>
           </div>
         </div>

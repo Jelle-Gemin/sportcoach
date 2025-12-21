@@ -1,49 +1,48 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { cookies } from 'next/headers';
+import { fetchAthleteStats } from '@/services/stravaApi';
 
 export async function GET(request: NextRequest) {
   try {
-    const cookieStore = cookies();
-    const accessToken = (await cookieStore).get('accessToken')?.value;
+    const cookieStore = await cookies();
+    const accessToken = cookieStore.get('accessToken')?.value;
 
     if (!accessToken) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    // First get the athlete ID from the profile endpoint
-    const athleteResponse = await fetch('https://www.strava.com/api/v3/athlete', {
-      headers: {
-        'Authorization': `Bearer ${accessToken}`,
-      },
-    });
-
-    if (!athleteResponse.ok) {
-      if (athleteResponse.status === 401) {
-        return NextResponse.json({ error: 'Token expired' }, { status: 401 });
-      }
-      throw new Error('Failed to fetch athlete data');
+    // Get athlete ID from cookie
+    const athleteCookie = cookieStore.get('athlete')?.value;
+    if (!athleteCookie) {
+      return NextResponse.json({ error: 'Athlete data not found in session' }, { status: 401 });
     }
 
-    const athlete = await athleteResponse.json();
+    const athleteData = JSON.parse(athleteCookie);
+    const athleteId = athleteData.id;
 
-    // Now fetch the stats using the athlete ID
-    const statsResponse = await fetch(`https://www.strava.com/api/v3/athletes/${athlete.id}/stats`, {
-      headers: {
-        'Authorization': `Bearer ${accessToken}`,
-      },
+    // Fetch athlete stats from Strava
+    const stats = await fetchAthleteStats(accessToken, athleteId);
+
+    // Calculate total activities across all sports
+    const totalActivities = stats.all_ride_totals.count +
+                           stats.all_run_totals.count +
+                           stats.all_swim_totals.count +
+                           stats.all_workout_totals.count;
+
+    return NextResponse.json({
+      totalActivities,
+      rideCount: stats.all_ride_totals.count,
+      runCount: stats.all_run_totals.count,
+      swimCount: stats.all_swim_totals.count,
+      workoutCount: stats.all_workout_totals.count,
+      stats
     });
 
-    if (!statsResponse.ok) {
-      if (statsResponse.status === 401) {
-        return NextResponse.json({ error: 'Token expired' }, { status: 401 });
-      }
-      throw new Error('Failed to fetch athlete stats');
-    }
-
-    const stats = await statsResponse.json();
-    return NextResponse.json(stats);
   } catch (error) {
-    console.error('Profile stats API error:', error);
-    return NextResponse.json({ error: 'Failed to fetch profile stats' }, { status: 500 });
+    console.error('Error fetching athlete stats:', error);
+    return NextResponse.json(
+      { error: 'Failed to fetch athlete stats' },
+      { status: 500 }
+    );
   }
 }
