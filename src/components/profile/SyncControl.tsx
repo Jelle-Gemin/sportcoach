@@ -2,10 +2,12 @@
 
 import React from 'react';
 import { useContinuousSync } from '../../hooks/useContinuousSync';
-import { useTotalActivities } from '../../hooks/useTotalActivities';
+import { useSyncedActivitiesCount } from '../../hooks/useSyncedActivitiesCount';
+import { useTotalActivities } from '@/hooks/useTotalActivities';
 
 export function SyncControl() {
-  const { totalActivities } = useTotalActivities();
+  const { syncedCount } = useSyncedActivitiesCount();
+  const {totalActivities} = useTotalActivities();
 
   const {
     isLoading,
@@ -37,8 +39,8 @@ export function SyncControl() {
   };
 
   const getProgressPercentage = () => {
-    if (!progress || progress.totalAthleteActivities === 0) return 0;
-    return Math.round((progress.activitiesProcessed / progress.totalAthleteActivities) * 100);
+    if (syncedCount === null || totalActivities === null) return 0;
+    return Math.round((syncedCount! / totalActivities!) * 100);
   };
 
   const canStart = progress?.status === 'not_started' || progress?.status === 'completed';
@@ -94,8 +96,8 @@ export function SyncControl() {
         <div>
           <div className="flex justify-between text-sm text-gray-600 mb-1">
             <span>{getStatusText()}</span>
-            {progress && (totalActivities || progress.totalAthleteActivities > 0) && (
-              <span>{progress.activitiesProcessed} / {totalActivities} activities</span>
+            {(syncedCount !== null || totalActivities !== null) && (
+              <span>{syncedCount} / {totalActivities} activities</span>
             )}
           </div>
           {progress?.status === 'syncing' && (

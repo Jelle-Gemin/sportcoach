@@ -45,6 +45,13 @@ export default function ProfilePage() {
 
   const { totalActivities, loading: totalActivitiesLoading, error: totalActivitiesError } = useTotalActivities();
 
+  // Refetch activities after initial sync completes
+  useEffect(() => {
+    if (initialSyncCompleted && activities.length === 0) {
+      refetch();
+    }
+  }, [initialSyncCompleted, refetch, activities.length]);
+
   // Redirect if not authenticated
   useEffect(() => {
     if (!authLoading && !isAuthenticated) {

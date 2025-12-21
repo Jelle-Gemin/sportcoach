@@ -367,8 +367,14 @@ export class StravaSync {
           const activityDetail = await fetchActivityDetail(accessToken, activity.id);
 
           // Fetch streams data
-          await this.rateLimitManager.checkAndWait();
-          const streams = await fetchActivityStreams(accessToken, activity.id, ['time', 'distance', 'heartrate', 'cadence', 'watts', 'altitude', 'latlng']);
+          let streams: any = null;
+          try {
+            await this.rateLimitManager.checkAndWait();
+            streams = await fetchActivityStreams(accessToken, activity.id, ['time', 'distance', 'heartrate', 'cadence', 'watts', 'altitude', 'latlng']);
+          } catch (streamsError) {
+            console.warn(`Failed to fetch streams for activity ${activity.id}:`, streamsError);
+            // Continue without streams
+          }
 
           const activityDoc = this.mapStravaToMongo(activityDetail, streams);
 
@@ -492,7 +498,7 @@ export class StravaSync {
         return { success: false, syncedCount: 0, completed: false, errors: [{ activityId: 0, error: 'Sync already running' }] };
       }
 
-      // Update status to syncing
+      // Update status to syncing 16472540063.
       await this.syncMetadataCollection.updateOne(
         { type: 'strava_sync' },
         {
@@ -576,8 +582,14 @@ export class StravaSync {
           const activityDetail = await fetchActivityDetail(accessToken, activityId);
 
           // Fetch streams data for graphs (heartrate, pace, cadence, etc.)
-          await this.rateLimitManager.checkAndWait();
-          const streams = await fetchActivityStreams(accessToken, activityId, ['time', 'distance', 'heartrate', 'cadence', 'watts', 'altitude', 'latlng']);
+          let streams: any = null;
+          try {
+            await this.rateLimitManager.checkAndWait();
+            streams = await fetchActivityStreams(accessToken, activityId, ['time', 'distance', 'heartrate', 'cadence', 'watts', 'altitude', 'latlng']);
+          } catch (streamsError) {
+            console.warn(`Failed to fetch streams for activity ${activityId}:`, streamsError);
+            // Continue without streams
+          }
 
           const activityDoc = this.mapStravaToMongo(activityDetail, streams);
 
@@ -590,6 +602,7 @@ export class StravaSync {
           // Successfully synced, remove from activitiesToSync
           activitiesToSync.shift(); // Remove the first element
           totalSynced++;
+          console.log(`Activity with id: ${activityId} synced and removed from activitiesToSync. Amout to be synced: ${activitiesToSync.length}`)
 
           // Update progress
           await this.syncMetadataCollection.updateOne(
@@ -650,11 +663,19 @@ export class StravaSync {
             continue;
 
           } else {
-            // Other error - log and remove from list
-            console.error(`Failed to process activity ${activityId}:`, error);
-            errors.push({ activityId: activityId, error: error instanceof Error ? error.message : String(error) });
-            // Remove failed activity to avoid infinite loop
-            activitiesToSync.shift();
+            // Check if this is a 404 error (activity not found/deleted/private)
+            const errorMessage = error instanceof Error ? error.message : String(error);
+            if (errorMessage.includes('HTTP 404')) {
+              // Activity is inaccessible (deleted, private, etc.) - skip without logging as failure
+              console.warn(`Skipping inaccessible activity ${activityId} (404 Not Found)`);
+              activitiesToSync.shift(); // Remove from list and continue
+            } else {
+              // Other error - log and remove from list
+              console.error(`Failed to process activity ${activityId}:`, error);
+              errors.push({ activityId: activityId, error: errorMessage });
+              // Remove failed activity to avoid infinite loop
+              activitiesToSync.shift();
+            }
           }
         }
       }
