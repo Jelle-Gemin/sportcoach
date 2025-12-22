@@ -28,8 +28,8 @@ export async function GET(request: NextRequest) {
     await stravaSync.connect();
 
     try {
-      // Get sync metadata
-      const metadata = await stravaSync.getSyncMetadata();
+      // Get sync metadata for this athlete
+      const metadata = await stravaSync.getSyncMetadata(athleteId);
 
       // Get athlete's total activities from Strava stats
       let totalAthleteActivities = 0;
