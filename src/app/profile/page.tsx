@@ -13,6 +13,7 @@ import { ProfileHeader } from '@/components/profile/ProfileHeader';
 import { ProfileSkeleton } from '@/components/profile/ProfileSkeleton';
 import { ActivityList } from '@/components/profile/ActivityList';
 import { SyncControl } from '@/components/profile/SyncControl';
+import { AppLayout } from '../../components/layout/AppLayout';
 
 
 export default function ProfilePage() {
@@ -107,11 +108,12 @@ export default function ProfilePage() {
   const error = profileError || activitiesError || initialSyncError || totalActivitiesError;
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      <div className="max-w-4xl mx-auto px-4 py-8">
-        <div className="mb-8">
-          <h1 className="text-3xl font-bold text-gray-900">Profile</h1>
-          <p className="text-gray-600 mt-2">View your Strava activity statistics and recent workouts.</p>
+    <AppLayout>
+      <div className="max-w-4xl mx-auto space-y-8">
+        {/* Header */}
+        <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm p-6">
+          <h1 className="text-3xl font-bold text-gray-900 dark:text-white">Profile</h1>
+          <p className="text-gray-600 dark:text-gray-300 mt-2">View your Strava activity statistics and recent workouts.</p>
         </div>
 
         {error && (
@@ -158,6 +160,6 @@ export default function ProfilePage() {
           </>
         ) : null}
       </div>
-    </div>
+    </AppLayout>
   );
 }

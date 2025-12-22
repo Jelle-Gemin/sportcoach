@@ -11,6 +11,7 @@ import { SyncSettings } from '../../components/settings/SyncSettings';
 import { AISettings } from '../../components/settings/AISettings';
 import { DataManagement } from '../../components/settings/DataManagement';
 import { AboutSection } from '../../components/settings/AboutSection';
+import { SettingsProvider } from '../../contexts/SettingsContext';
 
 export default function SettingsPage() {
   const { isAuthenticated, isLoading } = useAuth();
@@ -35,23 +36,25 @@ export default function SettingsPage() {
   }
 
   return (
-    <div className="max-w-4xl mx-auto space-y-8">
-      {/* Header */}
-      <div className="bg-white rounded-lg shadow-sm p-6">
-        <h1 className="text-3xl font-bold text-gray-900">Settings</h1>
-        <p className="text-gray-600 mt-2">
-          Manage your account preferences and app settings
-        </p>
-      </div>
+    <SettingsProvider>
+      <div className="max-w-4xl mx-auto space-y-8">
+        {/* Header */}
+        <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm p-6">
+          <h1 className="text-3xl font-bold text-gray-900 dark:text-white">Settings</h1>
+          <p className="text-gray-600 dark:text-gray-300 mt-2">
+            Manage your account preferences and app settings
+          </p>
+        </div>
 
-      {/* Settings Sections */}
-      <AccountSettings />
-      <UnitsPreferences />
-      <NotificationsSettings />
-      <SyncSettings />
-      <AISettings />
-      <DataManagement />
-      <AboutSection />
-    </div>
+        {/* Settings Sections */}
+        <AccountSettings />
+        <UnitsPreferences />
+        <NotificationsSettings />
+        <SyncSettings />
+        <AISettings />
+        <DataManagement />
+        <AboutSection />
+      </div>
+    </SettingsProvider>
   );
 }

@@ -11,6 +11,15 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
+    // Get athlete ID from cookie
+    const athleteCookie = cookieStore.get('athlete')?.value;
+    if (!athleteCookie) {
+      return NextResponse.json({ error: 'Athlete data not found in session' }, { status: 401 });
+    }
+
+    const athleteData = JSON.parse(athleteCookie);
+    const athleteId = athleteData.id;
+
     // Initialize MongoDB connection
     const mongoUri = process.env.MONGODB_URI || 'mongodb://localhost:27017';
     const dbName = process.env.MONGODB_DB_NAME || 'strava_data';
@@ -20,7 +29,7 @@ export async function POST(request: NextRequest) {
     await stravaSync.initializeIndexes();
 
     try {
-      const result = await stravaSync.initialSync(accessToken);
+      const result = await stravaSync.initialSync(accessToken, athleteId);
 
       return NextResponse.json({
         success: result.success,

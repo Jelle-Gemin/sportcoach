@@ -43,6 +43,15 @@ export async function GET(request: NextRequest) {
       }
     }
 
+    // Get athlete ID from cookie
+    const athleteCookie = cookieStore.get('athlete')?.value;
+    if (!athleteCookie) {
+      return NextResponse.json({ error: 'Athlete data not found in session' }, { status: 401 });
+    }
+
+    const athleteData = JSON.parse(athleteCookie);
+    const athleteId = athleteData.id;
+
     const { searchParams } = new URL(request.url);
     const limit = parseInt(searchParams.get('limit') || '50');
     const offset = parseInt(searchParams.get('offset') || '0');
@@ -59,7 +68,7 @@ export async function GET(request: NextRequest) {
 
     try {
       // Immediately return activities from database
-      const result = await stravaSync.getActivities(limit, offset, type, startDate, endDate);
+      const result = await stravaSync.getActivities(athleteId, limit, offset, type, startDate, endDate);
 
       // Transform ActivityDocument to StravaActivity format
       const transformedActivities: StravaActivity[] = result.activities.map(activity => ({

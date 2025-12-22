@@ -11,6 +11,15 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
+    // Get athlete ID from cookie
+    const athleteCookie = cookieStore.get('athlete')?.value;
+    if (!athleteCookie) {
+      return NextResponse.json({ error: 'Athlete data not found in session' }, { status: 401 });
+    }
+
+    const athleteData = JSON.parse(athleteCookie);
+    const athleteId = athleteData.id;
+
     const mongoUri = process.env.MONGODB_URI || 'mongodb://localhost:27017';
     const dbName = process.env.MONGODB_DB_NAME || 'strava_data';
 
@@ -18,11 +27,11 @@ export async function GET(request: NextRequest) {
     await stravaSync.connect();
 
     try {
-      // Get sync metadata
-      const metadata = await stravaSync.getSyncMetadata();
+      // Get sync metadata for this athlete
+      const metadata = await stravaSync.getSyncMetadata(athleteId);
 
-      // Get actual count of activities in database
-      const actualActivityCount = await stravaSync.getActivities(1, 0).then(result => result.total);
+      // Get actual count of activities in database for this athlete
+      const actualActivityCount = await stravaSync.getActivities(athleteId, 0).then(result => result.total);
 
       return NextResponse.json({
         initialSyncStatus: metadata?.strava_sync_status || 'not_started',

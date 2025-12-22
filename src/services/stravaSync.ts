@@ -5,6 +5,7 @@ import { MongoClient, Db, Collection } from 'mongodb';
 
 interface ActivityDocument {
   _id?: any;
+  athleteId: number;
   stravaId: number;
   name: string;
   date: Date;
@@ -285,13 +286,16 @@ export class StravaSync {
 
   async initializeIndexes(): Promise<void> {
     await this.activitiesCollection.createIndex({ stravaId: 1 }, { unique: true });
+    await this.activitiesCollection.createIndex({ athleteId: 1 });
+    await this.activitiesCollection.createIndex({ athleteId: 1, date: -1 });
+    await this.activitiesCollection.createIndex({ athleteId: 1, type: 1 });
     await this.activitiesCollection.createIndex({ date: -1 });
     await this.activitiesCollection.createIndex({ type: 1 });
     await this.athletesCollection.createIndex({ stravaId: 1 }, { unique: true });
     await this.syncMetadataCollection.createIndex({ type: 1 }, { unique: true });
   }
 
-  async initialSync(accessToken: string): Promise<{
+  async initialSync(accessToken: string, athleteId: number): Promise<{
     success: boolean;
     syncedCount: number;
     hasOlderActivities: boolean;
@@ -300,11 +304,11 @@ export class StravaSync {
     try {
       console.log('Starting initial sync (30 most recent activities)');
 
-      // Get sync metadata
-      let metadata: SyncMetadataDocument | null = await this.syncMetadataCollection.findOne({ type: 'strava_sync' });
+      // Get sync metadata for this athlete
+      let metadata: SyncMetadataDocument | null = await this.syncMetadataCollection.findOne({ type: `strava_sync_${athleteId}` });
       if (!metadata) {
         metadata = {
-          type: 'strava_sync',
+          type: `strava_sync_${athleteId}`,
           strava_sync_status: 'not_started',
           strava_last_sync_check: new Date(0),
           strava_newest_activity_date: undefined,
@@ -332,8 +336,9 @@ export class StravaSync {
 
       // Update status to initial sync in progress
       await this.syncMetadataCollection.updateOne(
-        { type: 'strava_sync' },
-        { $set: { strava_sync_status: 'initial_syncing', last_error: undefined } }
+        { type: `strava_sync_${athleteId}` },
+        { $set: { strava_sync_status: 'initial_syncing', last_error: undefined } },
+        { upsert: true }
       );
 
       let syncedCount = 0;
@@ -346,7 +351,7 @@ export class StravaSync {
       if (activities.length === 0) {
         // No activities found
         await this.syncMetadataCollection.updateOne(
-          { type: 'strava_sync' },
+          { type: `strava_sync_${athleteId}` },
           {
             $set: {
               strava_sync_status: 'initial_complete',
@@ -354,7 +359,8 @@ export class StravaSync {
               total_activities_count: 0,
               has_older_activities: false,
             }
-          }
+          },
+          { upsert: true }
         );
         return { success: true, syncedCount: 0, hasOlderActivities: false, errors: [] };
       }
@@ -376,7 +382,7 @@ export class StravaSync {
             // Continue without streams
           }
 
-          const activityDoc = this.mapStravaToMongo(activityDetail, streams);
+          const activityDoc = this.mapStravaToMongo(activityDetail, streams, athleteId);
 
           await this.activitiesCollection.updateOne(
             { stravaId: activity.id },
@@ -410,7 +416,7 @@ export class StravaSync {
       const oldestActivity = activities[activities.length - 1];
 
       await this.syncMetadataCollection.updateOne(
-        { type: 'strava_sync' },
+        { type: `strava_sync_${athleteId}` },
         {
           $set: {
             strava_sync_status: 'initial_complete',
@@ -421,7 +427,8 @@ export class StravaSync {
             has_older_activities: hasOlderActivities,
             rate_limit_info: this.rateLimitManager.getRateLimitInfo(),
           }
-        }
+        },
+        { upsert: true }
       );
 
       console.log(`Initial sync completed: ${syncedCount} activities synced, has older: ${hasOlderActivities}`);
@@ -437,7 +444,7 @@ export class StravaSync {
       console.error('Initial sync failed:', error);
       const errorMessage = error instanceof Error ? error.message : String(error);
       await this.syncMetadataCollection.updateOne(
-        { type: 'strava_sync' },
+        { type: `strava_sync_${athleteId}` },
         {
           $set: {
             strava_sync_status: 'error',
@@ -446,7 +453,8 @@ export class StravaSync {
               message: errorMessage,
             }
           }
-        }
+        },
+        { upsert: true }
       );
       return {
         success: false,
@@ -457,7 +465,7 @@ export class StravaSync {
     }
   }
 
-  async continuousHistoricalSync(accessToken: string): Promise<{
+  async continuousHistoricalSync(accessToken: string, athleteId: number): Promise<{
     success: boolean;
     syncedCount: number;
     completed: boolean;
@@ -466,12 +474,12 @@ export class StravaSync {
     try {
       console.log('Starting continuous historical sync');
 
-      // Get sync metadata
-      let metadata: SyncMetadataDocument | null = await this.syncMetadataCollection.findOne({ type: 'strava_sync' });
+      // Get sync metadata for this athlete
+      let metadata: SyncMetadataDocument | null = await this.syncMetadataCollection.findOne({ type: `strava_sync_${athleteId}` });
       if (!metadata) {
         // Create default metadata if none exists
         metadata = {
-          type: 'strava_sync',
+          type: `strava_sync_${athleteId}`,
           strava_sync_status: 'not_started',
           strava_last_sync_check: new Date(0),
           strava_newest_activity_date: undefined,
@@ -498,9 +506,9 @@ export class StravaSync {
         return { success: false, syncedCount: 0, completed: false, errors: [{ activityId: 0, error: 'Sync already running' }] };
       }
 
-      // Update status to syncing 16472540063.
+      // Update status to syncing
       await this.syncMetadataCollection.updateOne(
-        { type: 'strava_sync' },
+        { type: `strava_sync_${athleteId}` },
         {
           $set: {
             continuous_sync_status: 'syncing',
@@ -514,7 +522,8 @@ export class StravaSync {
             },
             last_error: undefined
           }
-        }
+        },
+        { upsert: true }
       );
 
       let totalSynced = 0;
@@ -525,10 +534,10 @@ export class StravaSync {
       const allActivityIds = await fetchAllActivityIds(accessToken);
       console.log(`Found ${allActivityIds.length} total activities on Strava`);
 
-      // Get all activity IDs already in the database
-      const existingActivities = await this.activitiesCollection.find({}, { projection: { stravaId: 1 } }).toArray();
+      // Get all activity IDs already in the database for this athlete
+      const existingActivities = await this.activitiesCollection.find({ athleteId }, { projection: { stravaId: 1 } }).toArray();
       const existingActivityIds = new Set(existingActivities.map(activity => activity.stravaId));
-      console.log(`Found ${existingActivityIds.size} activities already in database`);
+      console.log(`Found ${existingActivityIds.size} activities already in database for athlete ${athleteId}`);
 
       // Filter out activities already in the database
       const activitiesToSync = allActivityIds.filter(id => !existingActivityIds.has(id));
@@ -538,7 +547,7 @@ export class StravaSync {
         console.log('All activities are already synced');
         // Mark continuous sync as completed
         await this.syncMetadataCollection.updateOne(
-          { type: 'strava_sync' },
+          { type: `strava_sync_${athleteId}` },
           {
             $set: {
               continuous_sync_status: 'completed',
@@ -556,7 +565,7 @@ export class StravaSync {
 
       // Update progress with total activities found
       await this.syncMetadataCollection.updateOne(
-        { type: 'strava_sync' },
+        { type: `strava_sync_${athleteId}` },
         {
           $set: {
             'continuous_sync_progress.totalActivitiesFound': allActivityIds.length,
@@ -568,7 +577,7 @@ export class StravaSync {
       // Process activities one by one, removing from activitiesToSync after successful sync
       while (activitiesToSync.length > 0) {
         // Check if sync should be paused
-        const metadata = await this.syncMetadataCollection.findOne({ type: 'strava_sync' });
+        const metadata = await this.syncMetadataCollection.findOne({ type: `strava_sync_${athleteId}` });
         if (metadata?.continuous_sync_status === 'paused') {
           console.log('Sync paused by user during activity processing');
           return { success: true, syncedCount: totalSynced, completed: false, errors };
@@ -591,7 +600,7 @@ export class StravaSync {
             // Continue without streams
           }
 
-          const activityDoc = this.mapStravaToMongo(activityDetail, streams);
+          const activityDoc = this.mapStravaToMongo(activityDetail, streams, athleteId);
 
           await this.activitiesCollection.updateOne(
             { stravaId: activityId },
@@ -606,12 +615,12 @@ export class StravaSync {
 
           // Update progress
           await this.syncMetadataCollection.updateOne(
-            { type: 'strava_sync' },
+            { type: `strava_sync_${athleteId}` },
             {
               $inc: { 'continuous_sync_progress.activitiesProcessed': 1 },
               $set: {
                 'continuous_sync_progress.lastProcessedActivityId': activityId,
-                total_activities_count: await this.activitiesCollection.countDocuments(),
+                total_activities_count: await this.activitiesCollection.countDocuments({ athleteId }),
               }
             }
           );
@@ -623,7 +632,7 @@ export class StravaSync {
 
             // Update metadata to indicate rate limit pause
             await this.syncMetadataCollection.updateOne(
-              { type: 'strava_sync' },
+              { type: `strava_sync_${athleteId}` },
               {
                 $set: {
                   continuous_sync_status: 'paused',
@@ -649,7 +658,7 @@ export class StravaSync {
 
             // Update status back to syncing
             await this.syncMetadataCollection.updateOne(
-              { type: 'strava_sync' },
+              { type: `strava_sync_${athleteId}` },
               {
                 $set: {
                   continuous_sync_status: 'syncing',
@@ -682,7 +691,7 @@ export class StravaSync {
 
       // Mark continuous sync as completed
       await this.syncMetadataCollection.updateOne(
-        { type: 'strava_sync' },
+        { type: `strava_sync_${athleteId}` },
         {
           $set: {
             continuous_sync_status: 'completed',
@@ -707,7 +716,7 @@ export class StravaSync {
       console.error('Continuous sync failed:', error);
       const errorMessage = error instanceof Error ? error.message : String(error);
       await this.syncMetadataCollection.updateOne(
-        { type: 'strava_sync' },
+        { type: `strava_sync_${athleteId}` },
         {
           $set: {
             continuous_sync_status: 'error',
@@ -759,8 +768,9 @@ export class StravaSync {
 
 
 
-  private mapStravaToMongo(stravaActivity: StravaActivityDetail, streams: any): ActivityDocument {
+  private mapStravaToMongo(stravaActivity: StravaActivityDetail, streams: any, athleteId: number): ActivityDocument {
     return {
+      athleteId,
       stravaId: stravaActivity.id,
       name: stravaActivity.name,
       date: new Date(stravaActivity.start_date_local),
@@ -820,12 +830,14 @@ export class StravaSync {
     return `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
   }
 
-  async getActivities(limit: number = 50, offset: number = 0, type?: string, startDate?: Date, endDate?: Date): Promise<{
+  async getActivities(athleteId: number, limit: number = 50, offset: number = 0, type?: string, startDate?: Date, endDate?: Date): Promise<{
     activities: ActivityDocument[];
     total: number;
     hasMore: boolean;
   }> {
-    const query: any = {};
+    console.log("Athlete Id: ", athleteId)
+    // Handle potential type mismatch where athleteId might be stored as string or number
+    const query: any = { athleteId: { $in: [athleteId, athleteId.toString()] } };
     if (type) query.type = type;
     if (startDate || endDate) {
       query.date = {};
@@ -871,7 +883,11 @@ export class StravaSync {
     };
   }
 
-  async getSyncMetadata(): Promise<SyncMetadataDocument | null> {
+  async getSyncMetadata(athleteId?: number): Promise<SyncMetadataDocument | null> {
+    if (athleteId) {
+      return await this.syncMetadataCollection.findOne({ type: `strava_sync_${athleteId}` });
+    }
+    // Fallback for legacy calls
     return await this.syncMetadataCollection.findOne({ type: 'strava_sync' });
   }
 
@@ -919,12 +935,12 @@ export class StravaSync {
 
 
 
-  async pauseContinuousSync(): Promise<{
+  async pauseContinuousSync(athleteId: number): Promise<{
     success: boolean;
     message: string;
   }> {
     try {
-      const metadata = await this.syncMetadataCollection.findOne({ type: 'strava_sync' });
+      const metadata = await this.syncMetadataCollection.findOne({ type: `strava_sync_${athleteId}` });
       if (!metadata) {
         return { success: false, message: 'No sync metadata found' };
       }
@@ -934,7 +950,7 @@ export class StravaSync {
       }
 
       await this.syncMetadataCollection.updateOne(
-        { type: 'strava_sync' },
+        { type: `strava_sync_${athleteId}` },
         { $set: { continuous_sync_status: 'paused' } }
       );
 
@@ -945,12 +961,12 @@ export class StravaSync {
     }
   }
 
-  async resumeContinuousSync(): Promise<{
+  async resumeContinuousSync(athleteId: number): Promise<{
     success: boolean;
     message: string;
   }> {
     try {
-      const metadata = await this.syncMetadataCollection.findOne({ type: 'strava_sync' });
+      const metadata = await this.syncMetadataCollection.findOne({ type: `strava_sync_${athleteId}` });
       if (!metadata) {
         return { success: false, message: 'No sync metadata found' };
       }
@@ -960,7 +976,7 @@ export class StravaSync {
       }
 
       await this.syncMetadataCollection.updateOne(
-        { type: 'strava_sync' },
+        { type: `strava_sync_${athleteId}` },
         { $set: { continuous_sync_status: 'syncing' } }
       );
 
@@ -971,13 +987,13 @@ export class StravaSync {
     }
   }
 
-  async cancelContinuousSync(): Promise<{
+  async cancelContinuousSync(athleteId: number): Promise<{
     success: boolean;
     message: string;
     activitiesSynced: number;
   }> {
     try {
-      const metadata = await this.syncMetadataCollection.findOne({ type: 'strava_sync' });
+      const metadata = await this.syncMetadataCollection.findOne({ type: `strava_sync_${athleteId}` });
       if (!metadata) {
         return { success: false, message: 'No sync metadata found', activitiesSynced: 0 };
       }
@@ -985,7 +1001,7 @@ export class StravaSync {
       const activitiesSynced = metadata.continuous_sync_progress?.activitiesProcessed || 0;
 
       await this.syncMetadataCollection.updateOne(
-        { type: 'strava_sync' },
+        { type: `strava_sync_${athleteId}` },
         {
           $set: {
             continuous_sync_status: 'not_started',
