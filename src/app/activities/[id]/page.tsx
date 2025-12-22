@@ -7,7 +7,6 @@ import { useActivityDetail } from '../../../hooks/useActivityDetail';
 import { AppLayout } from '../../../components/layout/AppLayout';
 import { ActivityHeader } from '../../../components/activities/ActivityHeader';
 import { ActivityMetrics } from '../../../components/activities/ActivityMetrics';
-import { PaceChart } from '../../../components/activities/charts/PaceChart';
 import { HeartRateChart } from '../../../components/activities/charts/HeartRateChart';
 import { ElevationChart } from '../../../components/activities/charts/ElevationChart';
 import { LapBreakdown } from '../../../components/activities/LapBreakdown';
@@ -105,7 +104,6 @@ export default function ActivityDetailPage() {
 
         {/* Charts */}
         <div className="grid md:grid-cols-2 gap-6">
-          <PaceChart streams={streams} />
           <HeartRateChart activity={activity} streams={streams} />
         </div>
 

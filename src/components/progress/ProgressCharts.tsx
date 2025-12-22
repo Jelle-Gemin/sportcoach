@@ -1,26 +1,127 @@
 'use client';
 
+import { useState, useEffect } from 'react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar } from 'recharts';
 
 interface ProgressChartsProps {
   timeRange: '4weeks' | '12weeks' | 'year' | 'all';
 }
 
-export function ProgressCharts({ timeRange }: ProgressChartsProps) {
-  // Mock data - in real app this would come from API
-  const volumeData = [
-    { week: 'Week 1', distance: 35 },
-    { week: 'Week 2', distance: 38 },
-    { week: 'Week 3', distance: 42 },
-    { week: 'Week 4', distance: 45 },
-  ];
+interface VolumeData {
+  week: string;
+  distance: number;
+}
 
-  const paceData = [
-    { week: 'Week 1', run: 5.45, ride: 25.2 },
-    { week: 'Week 2', run: 5.38, ride: 25.5 },
-    { week: 'Week 3', run: 5.32, ride: 25.8 },
-    { week: 'Week 4', run: 5.24, ride: 26.1 },
-  ];
+interface PaceData {
+  week: string;
+  run: number | null;
+  ride: number | null;
+}
+
+interface Summary {
+  totalDistance: number;
+  avgWeeklyDistance: number;
+  maxWeeklyDistance: number;
+  runImprovement: number;
+  rideImprovement: number;
+}
+
+interface ApiResponse {
+  volumeData: VolumeData[];
+  paceData: PaceData[];
+  summary: Summary;
+}
+
+export function ProgressCharts({ timeRange }: ProgressChartsProps) {
+  const [data, setData] = useState<ApiResponse | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    const fetchProgressData = async () => {
+      setLoading(true);
+      setError(null);
+      try {
+        const response = await fetch(`/api/progress?timeRange=${timeRange}`);
+        if (!response.ok) {
+          throw new Error('Failed to fetch progress data');
+        }
+        const result: ApiResponse = await response.json();
+        setData(result);
+      } catch (err) {
+        setError(err instanceof Error ? err.message : 'An error occurred');
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchProgressData();
+  }, [timeRange]);
+
+  const formatPace = (pace: number | null): string => {
+    if (!pace || pace <= 0) return 'N/A';
+    const minutes = Math.floor(pace);
+    const seconds = Math.round((pace - minutes) * 60);
+    return `${minutes}:${seconds.toString().padStart(2, '0')}`;
+  };
+
+  const formatImprovement = (improvement: number, type: 'run' | 'ride'): string => {
+    if (improvement === 0) return '0';
+    const sign = improvement > 0 ? (type === 'run' ? '-' : '+') : (type === 'run' ? '+' : '-');
+    if (type === 'run') {
+      const minutes = Math.floor(Math.abs(improvement));
+      const seconds = Math.round((Math.abs(improvement) - minutes) * 60);
+      return `${sign}${minutes}:${seconds.toString().padStart(2, '0')}`;
+    } else {
+      return `${sign}${Math.abs(improvement).toFixed(1)}`;
+    }
+  };
+
+  if (loading) {
+    return (
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <div className="bg-white rounded-lg shadow-sm p-6">
+          <div className="h-64 flex items-center justify-center">
+            <div className="text-gray-500">Loading...</div>
+          </div>
+        </div>
+        <div className="bg-white rounded-lg shadow-sm p-6">
+          <div className="h-64 flex items-center justify-center">
+            <div className="text-gray-500">Loading...</div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <div className="bg-white rounded-lg shadow-sm p-6">
+          <div className="h-64 flex items-center justify-center">
+            <div className="text-red-500">Error: {error}</div>
+          </div>
+        </div>
+        <div className="bg-white rounded-lg shadow-sm p-6">
+          <div className="h-64 flex items-center justify-center">
+            <div className="text-red-500">Error: {error}</div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (!data) return null;
+
+  const { volumeData, paceData, summary } = data;
+
+  const currentDistance = volumeData.length > 0 ? volumeData[volumeData.length - 1].distance : 0;
+  const validRunWeeks = paceData.filter(w => w.run && w.run > 0);
+  const firstRunPace = validRunWeeks.length > 0 ? validRunWeeks[0].run : null;
+  const lastRunPace = validRunWeeks.length > 0 ? validRunWeeks[validRunWeeks.length - 1].run : null;
+  const validRideWeeks = paceData.filter(w => w.ride && w.ride > 0);
+  const firstRideSpeed = validRideWeeks.length > 0 ? validRideWeeks[0].ride : null;
+  const lastRideSpeed = validRideWeeks.length > 0 ? validRideWeeks[validRideWeeks.length - 1].ride : null;
 
   return (
     <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
@@ -39,15 +140,15 @@ export function ProgressCharts({ timeRange }: ProgressChartsProps) {
               <Line
                 type="monotone"
                 dataKey="distance"
-                stroke="#FC4C02"
+                stroke="#6366F1"
                 strokeWidth={2}
-                dot={{ fill: '#FC4C02' }}
+                dot={{ fill: '#6366F1' }}
               />
             </LineChart>
           </ResponsiveContainer>
         </div>
         <div className="mt-4 text-sm text-gray-600">
-          Current: 45km • Peak: 65km • Avg: 38km
+          Current: {currentDistance}km • Peak: {summary.maxWeeklyDistance}km • Avg: {summary.avgWeeklyDistance}km
         </div>
       </div>
 
@@ -81,7 +182,7 @@ export function ProgressCharts({ timeRange }: ProgressChartsProps) {
           </ResponsiveContainer>
         </div>
         <div className="mt-4 text-sm text-gray-600">
-          Run: 5:24/km → 5:16/km (-8 sec) • Ride: 24.5 km/h → 25.2 km/h (+0.7 km/h)
+          Run: {formatPace(firstRunPace)}/km → {formatPace(lastRunPace)}/km ({formatImprovement(summary.runImprovement, 'run')} sec) • Ride: {firstRideSpeed?.toFixed(1)} km/h → {lastRideSpeed?.toFixed(1)} km/h ({formatImprovement(summary.rideImprovement, 'ride')} km/h)
         </div>
       </div>
     </div>

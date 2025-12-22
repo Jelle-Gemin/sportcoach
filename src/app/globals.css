@@ -12,17 +12,17 @@
   --font-sans: 'Inter', system-ui, sans-serif;
   --font-mono: var(--font-geist-mono);
 
-  /* Strava-inspired color scheme */
-  --color-primary: #FC4C02;
-  --color-primary-dark: #E03E00;
-  --color-primary-light: #FF6B3D;
-  --color-secondary: #1E3A8A;
-  --color-secondary-dark: #1E293B;
-  --color-secondary-light: #3B82F6;
+  /* Modern color scheme */
+  --color-primary: #6366F1;
+  --color-primary-dark: #4F46E5;
+  --color-primary-light: #8B5CF6;
+  --color-secondary: #06B6D4;
+  --color-secondary-dark: #0891B2;
+  --color-secondary-light: #22D3EE;
   --color-success: #10B981;
   --color-warning: #F59E0B;
   --color-error: #EF4444;
-  --color-info: #3B82F6;
+  --color-info: #06B6D4;
 
   /* Modern gray scale */
   --color-gray-50: #F9FAFB;

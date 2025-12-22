@@ -829,8 +829,8 @@ Your plan includes:
 ### Colors
 
 ```
-Primary: #FC4C02 (Strava Orange)
-Secondary: #1E3A8A (Dark Blue)
+Primary: #6366F1 (Modern Indigo)
+Secondary: #06B6D4 (Modern Cyan)
 Success: #10B981
 Warning: #F59E0B
 Error: #EF4444
