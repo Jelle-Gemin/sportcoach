@@ -22,7 +22,7 @@ export function WeeklyCalendar({ weekNumber }: WeeklyCalendarProps) {
   };
 
   return (
-    <div className="bg-white rounded-lg shadow-sm p-6">
+    <div className="bg-cardrounded-lg shadow-sm p-6">
       <div className="flex items-center mb-6">
         <CalendarDaysIcon className="h-6 w-6 text-blue-600 mr-3" />
         <h2 className="text-xl font-semibold text-gray-900">

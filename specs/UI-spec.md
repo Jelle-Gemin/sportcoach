@@ -829,25 +829,27 @@ Your plan includes:
 ### Colors
 
 ```
-Primary: #6366F1 (Modern Indigo)
-Secondary: #06B6D4 (Modern Cyan)
+Primary: #3B82F6
+Secondary: #2563EB
 Success: #10B981
 Warning: #F59E0B
 Error: #EF4444
 Info: #3B82F6
 
 Grays:
-- 50: #F9FAFB
-- 100: #F3F4F6
-- 200: #E5E7EB
-- 300: #D1D5DB
-- 500: #6B7280
-- 700: #374151
-- 900: #111827
+- 50: #0A0F1A
+- 100: #11182A
+- 200: #1A2333
+- 300: #212B3D
+- 400: #475569
+- 500: #64748B
+- 600: #94A3B8
+- 700: #CBD5E1
+- 800: #E2E8F0
+- 900: #F1F5F9
 
 Backgrounds:
-- Light mode: #FFFFFF, #F9FAFB
-- Dark mode: #111827, #1F2937
+- Dark mode: #0A0F1A, #1A2333
 ```
 
 ### Typography

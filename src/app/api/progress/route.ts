@@ -11,6 +11,15 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
+    // Get athlete ID from cookie
+    const athleteCookie = cookieStore.get('athlete')?.value;
+    if (!athleteCookie) {
+      return NextResponse.json({ error: 'Athlete data not found in session' }, { status: 401 });
+    }
+
+    const athleteData = JSON.parse(athleteCookie);
+    const athleteId = athleteData.id.toString();
+
     const { searchParams } = new URL(request.url);
     const timeRange = searchParams.get('timeRange') || '4weeks';
 
@@ -44,7 +53,7 @@ export async function GET(request: NextRequest) {
 
     try {
       // Get all activities in the date range
-      const result = await stravaSync.getActivities(10000, 0, undefined, startDate, now);
+      const result = await stravaSync.getActivities(athleteId ,10000, 0, undefined, startDate, now);
       const activities = result.activities;
 
       // Group activities by week (Monday to Sunday)

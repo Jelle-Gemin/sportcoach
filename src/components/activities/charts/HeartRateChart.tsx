@@ -12,7 +12,7 @@ interface HeartRateChartProps {
 export function HeartRateChart({ activity, streams }: HeartRateChartProps) {
   if (!streams?.heartrate?.data || !streams?.time?.data) {
     return (
-      <div className="bg-white rounded-lg p-6 border border-gray-200">
+      <div className="bg-card rounded-lg p-6 border border-gray-200">
         <h3 className="text-lg font-semibold text-gray-900 mb-4">Heart Rate Chart</h3>
         <div className="h-64 flex items-center justify-center bg-gray-50 rounded">
           <div className="text-center text-gray-500">
@@ -31,7 +31,7 @@ export function HeartRateChart({ activity, streams }: HeartRateChartProps) {
   })).filter(point => point.heartrate !== null);
 
   return (
-    <div className="bg-white rounded-lg p-6 border border-gray-200">
+    <div className="bg-card rounded-lg p-6 border border-gray-200">
       <h3 className="text-lg font-semibold text-gray-900 mb-4">Heart Rate Chart</h3>
       <div className="h-64">
         <ResponsiveContainer width="100%" height="100%">

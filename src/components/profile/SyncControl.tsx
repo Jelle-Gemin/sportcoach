@@ -49,7 +49,7 @@ export function SyncControl() {
   const canCancel = progress?.status === 'syncing' || progress?.status === 'paused';
 
   return (
-    <div className="bg-white rounded-lg shadow-sm p-6 mb-6">
+    <div className="bg-card rounded-lg shadow-sm p-6 mb-6">
       <div className="flex items-center justify-between mb-4">
         <h2 className="text-lg font-semibold text-gray-900">Historical Activity Sync</h2>
         <div className="flex space-x-2">

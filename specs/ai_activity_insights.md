@@ -10,19 +10,20 @@ This document specifies the AI-powered activity analysis feature that provides i
 
 ```javascript
 // Initialize Puter.js
-import puter from 'puter';
+import puter from "puter";
 
 // AI Service Configuration
 const AI_CONFIG = {
-  model: 'gpt-4o', // Free tier model via Puter.js
+  model: "gpt-4o", // Free tier model via Puter.js
   temperature: 0.7,
-  max_tokens: 1500
+  max_tokens: 1500,
 };
 ```
 
 ### Model Selection Rationale
 
 **Using GPT-4o (via Puter.js):**
+
 - Free tier access through Puter.js platform
 - Strong analytical capabilities for fitness data
 - Good balance between performance and cost
@@ -47,18 +48,18 @@ interface ActivityAnalysisInput {
   movingTime: number; // seconds
   elapsedTime: number; // seconds
   total_elevation_gain: number; // meters
-  
+
   // Pace data
   averagePace: string; // mm:ss/km format
   maxPace: string; // mm:ss/km format
-  
+
   // Heart rate data
   avgHR: number; // bpm
   maxHR: number; // bpm
-  
+
   // Cadence data
   avgCadence?: number; // rpm
-  
+
   // Lap data
   laps: Array<{
     distance: number;
@@ -68,7 +69,7 @@ interface ActivityAnalysisInput {
     averageCadence?: number;
     maxHeartrate: number;
   }>;
-  
+
   // Time series data (streams)
   streams: {
     time: number[]; // seconds
@@ -79,7 +80,7 @@ interface ActivityAnalysisInput {
     altitude?: number[]; // meters
     watts?: number[]; // watts (for cycling)
   };
-  
+
   // User context (optional but helpful)
   userProfile?: {
     restingHR?: number;
@@ -102,6 +103,7 @@ interface ActivityAnalysisInput {
 **Purpose:** Provide an overall assessment of the workout quality and key achievements.
 
 **Analysis Points:**
+
 - Overall workout quality (excellent/good/moderate/needs improvement)
 - Key achievements and milestones
 - Comparison to typical workouts (if historical data available)
@@ -109,12 +111,13 @@ interface ActivityAnalysisInput {
 - Energy distribution throughout the activity
 
 **Example Output:**
+
 ```
-This was a strong tempo run with excellent pacing discipline. You maintained 
-a consistent effort throughout, with your fastest kilometer coming at the 8km 
-mark (4:12/km). Your average pace of 4:35/km represents a 3% improvement over 
-your recent runs at similar distances. The steady heart rate progression 
-indicates good aerobic efficiency. Notable achievement: This is your 3rd fastest 
+This was a strong tempo run with excellent pacing discipline. You maintained
+a consistent effort throughout, with your fastest kilometer coming at the 8km
+mark (4:12/km). Your average pace of 4:35/km represents a 3% improvement over
+your recent runs at similar distances. The steady heart rate progression
+indicates good aerobic efficiency. Notable achievement: This is your 3rd fastest
 10K time this year.
 ```
 
@@ -123,6 +126,7 @@ indicates good aerobic efficiency. Notable achievement: This is your 3rd fastest
 **Purpose:** Analyze pacing strategy, consistency, and identify patterns.
 
 **Analysis Points:**
+
 - Pacing strategy assessment (even, negative split, positive split)
 - Pace variability and consistency metrics
 - Kilometer/mile splits analysis
@@ -131,24 +135,26 @@ indicates good aerobic efficiency. Notable achievement: This is your 3rd fastest
 - Terrain impact on pace (if elevation data available)
 
 **Calculations to Perform:**
+
 ```javascript
 // Pace consistency score
 const paceVariability = calculateStandardDeviation(lapPaces);
-const consistencyScore = 100 - (paceVariability / averagePace * 100);
+const consistencyScore = 100 - (paceVariability / averagePace) * 100;
 
 // Split comparison
-const firstHalfPace = calculateAveragePace(laps.slice(0, laps.length/2));
-const secondHalfPace = calculateAveragePace(laps.slice(laps.length/2));
+const firstHalfPace = calculateAveragePace(laps.slice(0, laps.length / 2));
+const secondHalfPace = calculateAveragePace(laps.slice(laps.length / 2));
 const splitDifference = secondHalfPace - firstHalfPace;
 ```
 
 **Example Output:**
+
 ```
-Your pacing was remarkably consistent with a 94% consistency score. You employed 
-a slight negative split strategy, running the second half 8 seconds per kilometer 
-faster than the first. This is excellent race-day execution. The fastest 
-kilometer came at 8km (4:12/km), showing you had energy reserves. Minor pace 
-variations between kilometers 3-5 (+10s/km) suggest you navigated a slight 
+Your pacing was remarkably consistent with a 94% consistency score. You employed
+a slight negative split strategy, running the second half 8 seconds per kilometer
+faster than the first. This is excellent race-day execution. The fastest
+kilometer came at 8km (4:12/km), showing you had energy reserves. Minor pace
+variations between kilometers 3-5 (+10s/km) suggest you navigated a slight
 incline. Overall, this demonstrates strong pacing maturity and race awareness.
 ```
 
@@ -157,6 +163,7 @@ incline. Overall, this demonstrates strong pacing maturity and race awareness.
 **Purpose:** Evaluate cardiovascular effort, training zones, and aerobic efficiency.
 
 **Analysis Points:**
+
 - Time spent in each heart rate zone
 - Heart rate drift analysis (early vs late workout)
 - Cardiac efficiency (pace relative to HR)
@@ -165,13 +172,21 @@ incline. Overall, this demonstrates strong pacing maturity and race awareness.
 - Aerobic decoupling (pace:HR relationship over time)
 
 **Calculations to Perform:**
+
 ```javascript
 // HR zones time distribution
-const zoneDistribution = calculateZoneTime(streams.heartrate, userProfile.trainingZones);
+const zoneDistribution = calculateZoneTime(
+  streams.heartrate,
+  userProfile.trainingZones
+);
 
 // HR drift (compare first 25% to last 25%)
-const earlyHR = average(streams.heartrate.slice(0, streams.heartrate.length * 0.25));
-const lateHR = average(streams.heartrate.slice(streams.heartrate.length * 0.75));
+const earlyHR = average(
+  streams.heartrate.slice(0, streams.heartrate.length * 0.25)
+);
+const lateHR = average(
+  streams.heartrate.slice(streams.heartrate.length * 0.75)
+);
 const hrDrift = ((lateHR - earlyHR) / earlyHR) * 100;
 
 // Aerobic efficiency
@@ -179,13 +194,14 @@ const aerobicEfficiency = averagePace / avgHR; // Lower is better
 ```
 
 **Example Output:**
+
 ```
-Your cardiovascular response was well-controlled with 65% of time in Zone 2-3 
-(aerobic endurance range). Average heart rate of 152 bpm represents 78% of your 
-estimated max, appropriate for a tempo effort. Heart rate drift was minimal at 
-3.2%, indicating good cardiovascular fitness and proper pacing. Your cardiac 
-efficiency of 0.030 (pace/HR ratio) is excellent for this effort level. The 
-heart rate dropped quickly in the final kilometer, suggesting good recovery 
+Your cardiovascular response was well-controlled with 65% of time in Zone 2-3
+(aerobic endurance range). Average heart rate of 152 bpm represents 78% of your
+estimated max, appropriate for a tempo effort. Heart rate drift was minimal at
+3.2%, indicating good cardiovascular fitness and proper pacing. Your cardiac
+efficiency of 0.030 (pace/HR ratio) is excellent for this effort level. The
+heart rate dropped quickly in the final kilometer, suggesting good recovery
 capacity.
 ```
 
@@ -194,6 +210,7 @@ capacity.
 **Purpose:** Evaluate workout execution consistency and identify patterns.
 
 **Analysis Points:**
+
 - Lap-to-lap consistency
 - Cadence consistency (if available)
 - Effort distribution
@@ -202,6 +219,7 @@ capacity.
 - Mental fortitude indicators (maintaining pace when tired)
 
 **Calculations to Perform:**
+
 ```javascript
 // Overall consistency metrics
 const lapPaceVariation = calculateCoefficientOfVariation(lapPaces);
@@ -209,17 +227,19 @@ const hrVariation = calculateCoefficientOfVariation(lapHeartRates);
 const cadenceVariation = calculateCoefficientOfVariation(lapCadences);
 
 // Effort consistency score
-const effortScore = 100 - (lapPaceVariation * 30 + hrVariation * 20 + cadenceVariation * 10);
+const effortScore =
+  100 - (lapPaceVariation * 30 + hrVariation * 20 + cadenceVariation * 10);
 ```
 
 **Example Output:**
+
 ```
-Excellent execution consistency with a 91/100 consistency score. Your kilometer 
-splits varied by only ±6 seconds, demonstrating strong mental discipline. 
-Cadence remained stable at 168-172 spm throughout, indicating good running form 
-maintenance even under fatigue. The most consistent segment was kilometers 5-8, 
-where pace variation was just ±3 seconds. This level of consistency suggests 
-you ran within your capabilities and had a clear mental plan. Consider this 
+Excellent execution consistency with a 91/100 consistency score. Your kilometer
+splits varied by only ±6 seconds, demonstrating strong mental discipline.
+Cadence remained stable at 168-172 spm throughout, indicating good running form
+maintenance even under fatigue. The most consistent segment was kilometers 5-8,
+where pace variation was just ±3 seconds. This level of consistency suggests
+you ran within your capabilities and had a clear mental plan. Consider this
 workout a model for future tempo efforts.
 ```
 
@@ -228,7 +248,10 @@ workout a model for future tempo efforts.
 ### Prompt Template Structure
 
 ```javascript
-const generateAnalysisPrompt = (activity: ActivityAnalysisInput, section: AnalysisSection): string => {
+const generateAnalysisPrompt = (
+  activity: ActivityAnalysisInput,
+  section: AnalysisSection
+): string => {
   const baseContext = `
 You are an expert running and cycling coach analyzing an athlete's workout data. 
 Provide specific, actionable insights based on the data. Be encouraging but honest. 
@@ -266,7 +289,7 @@ ${baseContext}
 Detailed lap data:
 ${formatDetailedLapData(activity.laps)}
 
-Pace stream data: ${activity.streams.pace ? 'Available' : 'Not available'}
+Pace stream data: ${activity.streams.pace ? "Available" : "Not available"}
 Elevation gain: ${activity.total_elevation_gain}m
 
 Analyze the pacing strategy (150-200 words) including:
@@ -285,10 +308,18 @@ ${baseContext}
 Heart rate data:
 - Average: ${activity.avgHR} bpm
 - Max: ${activity.maxHR} bpm
-${activity.userProfile?.restingHR ? `- Resting: ${activity.userProfile.restingHR} bpm` : ''}
-${activity.userProfile?.maxHR ? `- Estimated Max: ${activity.userProfile.maxHR} bpm` : ''}
+${
+  activity.userProfile?.restingHR
+    ? `- Resting: ${activity.userProfile.restingHR} bpm`
+    : ""
+}
+${
+  activity.userProfile?.maxHR
+    ? `- Estimated Max: ${activity.userProfile.maxHR} bpm`
+    : ""
+}
 
-HR stream: ${activity.streams.heartrate ? 'Available' : 'Not available'}
+HR stream: ${activity.streams.heartrate ? "Available" : "Not available"}
 
 Analyze cardiovascular response (150-200 words) covering:
 1. Time in different effort zones
@@ -306,7 +337,7 @@ ${baseContext}
 Lap-by-lap breakdown:
 ${formatLapData(activity.laps)}
 
-${activity.avgCadence ? `Average Cadence: ${activity.avgCadence} rpm` : ''}
+${activity.avgCadence ? `Average Cadence: ${activity.avgCadence} rpm` : ""}
 
 Analyze workout consistency (150-200 words) addressing:
 1. Lap-to-lap variation (pace, HR, cadence)
@@ -316,7 +347,7 @@ Analyze workout consistency (150-200 words) addressing:
 5. Mental discipline indicators
 
 Calculate specific variation metrics and highlight the most consistent segments.
-`
+`,
   };
 
   return sectionPrompts[section];
@@ -326,13 +357,14 @@ Calculate specific variation metrics and highlight the most consistent segments.
 ### Prompt Enhancement Strategies
 
 1. **Include calculated metrics in prompt:**
+
 ```javascript
 // Pre-calculate metrics to guide AI analysis
 const metrics = {
   paceConsistency: calculatePaceConsistency(laps),
   hrDrift: calculateHRDrift(streams),
   splitType: determineSplitType(laps),
-  effortScore: calculateEffortScore(activity)
+  effortScore: calculateEffortScore(activity),
 };
 
 // Include in prompt
@@ -349,15 +381,22 @@ Use these metrics to provide specific, data-driven insights.
 ```
 
 2. **Provide comparison context when available:**
+
 ```javascript
 // If we have historical data
 if (historicalActivities.length > 0) {
   prompt += `
 Recent similar workouts for context:
-${historicalActivities.map(a => `
-- ${formatDate(a.date)}: ${(a.distance/1000).toFixed(1)}km in ${formatDuration(a.movingTime)} 
+${historicalActivities
+  .map(
+    (a) => `
+- ${formatDate(a.date)}: ${(a.distance / 1000).toFixed(
+      1
+    )}km in ${formatDuration(a.movingTime)} 
   (avg pace: ${a.averagePace}/km, avg HR: ${a.avgHR} bpm)
-`).join('')}
+`
+  )
+  .join("")}
 
 Compare this workout to recent similar efforts.
 `;
@@ -450,20 +489,24 @@ db.activity_analyses.createIndex({ expires_at: 1 }, { expireAfterSeconds: 0 }); 
 ### Analysis Service (`services/aiAnalysisService.ts`)
 
 ```typescript
-import puter from 'puter';
+import puter from "puter";
 
 class AIAnalysisService {
   private puter: typeof puter;
-  
+
   constructor() {
     this.puter = puter;
   }
 
   async generateAnalysis(
     activity: ActivityAnalysisInput,
-    sections: AnalysisSection[] = ['performance_summary', 'pace_analysis', 'heart_rate', 'consistency']
+    sections: AnalysisSection[] = [
+      "performance_summary",
+      "pace_analysis",
+      "heart_rate",
+      "consistency",
+    ]
   ): Promise<ActivityAnalysis> {
-    
     // 1. Check cache first
     const cached = await this.getCachedAnalysis(activity.stravaId);
     if (cached && !this.isStale(cached)) {
@@ -472,34 +515,34 @@ class AIAnalysisService {
 
     // 2. Generate each section
     const analysis: Partial<ActivityAnalysis> = {};
-    
+
     for (const section of sections) {
       const prompt = generateAnalysisPrompt(activity, section);
-      
+
       try {
         const response = await this.puter.ai.chat({
-          model: 'gpt-4o',
+          model: "gpt-4o",
           messages: [
             {
-              role: 'system',
-              content: 'You are an expert running and cycling coach providing detailed workout analysis.'
+              role: "system",
+              content:
+                "You are an expert running and cycling coach providing detailed workout analysis.",
             },
             {
-              role: 'user',
-              content: prompt
-            }
+              role: "user",
+              content: prompt,
+            },
           ],
           temperature: 0.7,
-          max_tokens: 400 // ~200 words per section
+          max_tokens: 400, // ~200 words per section
         });
-        
+
         analysis[section] = response.choices[0].message.content;
-        
       } catch (error) {
         console.error(`Error generating ${section}:`, error);
         analysis[section] = this.getFallbackContent(section);
       }
-      
+
       // Rate limiting: small delay between sections
       await this.sleep(500);
     }
@@ -512,25 +555,28 @@ class AIAnalysisService {
 
   async getCachedAnalysis(stravaId: number): Promise<CachedAnalysis | null> {
     const db = await this.getDatabase();
-    return db.collection('activity_analyses').findOne({ stravaId });
+    return db.collection("activity_analyses").findOne({ stravaId });
   }
 
-  async cacheAnalysis(stravaId: number, analysis: ActivityAnalysis): Promise<void> {
+  async cacheAnalysis(
+    stravaId: number,
+    analysis: ActivityAnalysis
+  ): Promise<void> {
     const db = await this.getDatabase();
-    
-    await db.collection('activity_analyses').updateOne(
+
+    await db.collection("activity_analyses").updateOne(
       { stravaId },
       {
         $set: {
           analysis,
           metadata: {
-            model: 'gpt-4o',
-            version: '1.0.0',
+            model: "gpt-4o",
+            version: "1.0.0",
             generated_at: new Date(),
-            generation_time_ms: Date.now() - this.startTime
+            generation_time_ms: Date.now() - this.startTime,
           },
-          last_accessed: new Date()
-        }
+          last_accessed: new Date(),
+        },
       },
       { upsert: true }
     );
@@ -545,16 +591,20 @@ class AIAnalysisService {
 
   private getFallbackContent(section: AnalysisSection): string {
     const fallbacks = {
-      performance_summary: 'Analysis temporarily unavailable. Please try again later.',
-      pace_analysis: 'Pace analysis temporarily unavailable. Please try again later.',
-      heart_rate: 'Heart rate analysis temporarily unavailable. Please try again later.',
-      consistency: 'Consistency analysis temporarily unavailable. Please try again later.'
+      performance_summary:
+        "Analysis temporarily unavailable. Please try again later.",
+      pace_analysis:
+        "Pace analysis temporarily unavailable. Please try again later.",
+      heart_rate:
+        "Heart rate analysis temporarily unavailable. Please try again later.",
+      consistency:
+        "Consistency analysis temporarily unavailable. Please try again later.",
     };
     return fallbacks[section];
   }
 
   private sleep(ms: number): Promise<void> {
-    return new Promise(resolve => setTimeout(resolve, ms));
+    return new Promise((resolve) => setTimeout(resolve, ms));
   }
 }
 
@@ -567,8 +617,8 @@ export const aiAnalysisService = new AIAnalysisService();
 
 ```typescript
 // components/activities/AIAnalysisSection.tsx
-import { useState, useEffect } from 'react';
-import { Loader2, Sparkles, RefreshCw } from 'lucide-react';
+import { useState, useEffect } from "react";
+import { Loader2, Sparkles, RefreshCw } from "lucide-react";
 
 interface AIAnalysisSectionProps {
   stravaId: number;
@@ -588,11 +638,11 @@ export function AIAnalysisSection({ stravaId }: AIAnalysisSectionProps) {
     try {
       setLoading(true);
       setError(null);
-      
+
       // Try to get cached analysis first
       const cached = await fetch(`/api/activities/${stravaId}/analysis`);
       const cachedData = await cached.json();
-      
+
       if (cachedData.exists) {
         setAnalysis(cachedData.analysis);
         setLoading(false);
@@ -601,7 +651,7 @@ export function AIAnalysisSection({ stravaId }: AIAnalysisSectionProps) {
         await generateAnalysis();
       }
     } catch (err) {
-      setError('Failed to load analysis');
+      setError("Failed to load analysis");
       setLoading(false);
     }
   };
@@ -609,20 +659,20 @@ export function AIAnalysisSection({ stravaId }: AIAnalysisSectionProps) {
   const generateAnalysis = async () => {
     try {
       const response = await fetch(`/api/activities/${stravaId}/analyze`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ forceRegenerate: regenerating })
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ forceRegenerate: regenerating }),
       });
-      
+
       const data = await response.json();
-      
+
       if (data.success) {
         setAnalysis(data.analysis);
       } else {
-        setError('Failed to generate analysis');
+        setError("Failed to generate analysis");
       }
     } catch (err) {
-      setError('Failed to generate analysis');
+      setError("Failed to generate analysis");
     } finally {
       setLoading(false);
       setRegenerating(false);
@@ -647,7 +697,7 @@ export function AIAnalysisSection({ stravaId }: AIAnalysisSectionProps) {
     return (
       <div className="bg-red-50 border border-red-200 rounded-lg p-6">
         <p className="text-red-800">{error}</p>
-        <button 
+        <button
           onClick={loadAnalysis}
           className="mt-4 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700"
         >
@@ -669,7 +719,9 @@ export function AIAnalysisSection({ stravaId }: AIAnalysisSectionProps) {
           disabled={regenerating}
           className="flex items-center gap-2 px-4 py-2 text-sm text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-lg transition-colors"
         >
-          <RefreshCw className={`w-4 h-4 ${regenerating ? 'animate-spin' : ''}`} />
+          <RefreshCw
+            className={`w-4 h-4 ${regenerating ? "animate-spin" : ""}`}
+          />
           Regenerate
         </button>
       </div>
@@ -680,19 +732,19 @@ export function AIAnalysisSection({ stravaId }: AIAnalysisSectionProps) {
           content={analysis?.performance_summary}
           icon="📊"
         />
-        
+
         <AnalysisCard
           title="Pace Analysis"
           content={analysis?.pace_analysis}
           icon="⚡"
         />
-        
+
         <AnalysisCard
           title="Heart Rate Analysis"
           content={analysis?.heart_rate}
           icon="❤️"
         />
-        
+
         <AnalysisCard
           title="Consistency"
           content={analysis?.consistency}
@@ -701,21 +753,30 @@ export function AIAnalysisSection({ stravaId }: AIAnalysisSectionProps) {
       </div>
 
       <p className="text-xs text-gray-500 text-center">
-        Analysis generated by AI • {new Date(analysis?.generated_at || '').toLocaleDateString()}
+        Analysis generated by AI •{" "}
+        {new Date(analysis?.generated_at || "").toLocaleDateString()}
       </p>
     </div>
   );
 }
 
-function AnalysisCard({ title, content, icon }: { title: string; content?: string; icon: string }) {
+function AnalysisCard({
+  title,
+  content,
+  icon,
+}: {
+  title: string;
+  content?: string;
+  icon: string;
+}) {
   return (
-    <div className="bg-white rounded-lg border border-gray-200 p-6 hover:shadow-md transition-shadow">
+    <div className="bg-card rounded-lg border border-gray-200 p-6 hover:shadow-md transition-shadow">
       <div className="flex items-center gap-2 mb-4">
         <span className="text-2xl">{icon}</span>
         <h3 className="text-lg font-semibold">{title}</h3>
       </div>
       <p className="text-gray-700 leading-relaxed whitespace-pre-wrap">
-        {content || 'Analysis not available'}
+        {content || "Analysis not available"}
       </p>
     </div>
   );
@@ -727,6 +788,7 @@ function AnalysisCard({ title, content, icon }: { title: string; content?: strin
 ### Cache Levels
 
 1. **Database Cache** (Primary)
+
    - Store all generated analyses in MongoDB
    - TTL: 30 days
    - Invalidate on activity update
@@ -744,21 +806,21 @@ async function shouldRegenerateAnalysis(
   currentActivity: ActivityAnalysisInput
 ): Promise<boolean> {
   const cached = await getCachedAnalysis(stravaId);
-  
+
   if (!cached) return true;
-  
+
   // Regenerate if activity data changed
   const currentHash = hashActivity(currentActivity);
   if (cached.activity_hash !== currentHash) return true;
-  
+
   // Regenerate if older than 30 days
   const thirtyDaysAgo = new Date();
   thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
   if (cached.metadata.generated_at < thirtyDaysAgo) return true;
-  
+
   // Regenerate if prompt version changed
   if (cached.metadata.version !== CURRENT_PROMPT_VERSION) return true;
-  
+
   return false;
 }
 
@@ -768,9 +830,12 @@ function hashActivity(activity: ActivityAnalysisInput): string {
     movingTime: activity.movingTime,
     avgHR: activity.avgHR,
     avgPace: activity.averagePace,
-    laps: activity.laps.length
+    laps: activity.laps.length,
   };
-  return crypto.createHash('md5').update(JSON.stringify(relevantData)).digest('hex');
+  return crypto
+    .createHash("md5")
+    .update(JSON.stringify(relevantData))
+    .digest("hex");
 }
 ```
 
@@ -788,7 +853,7 @@ async function generateWithFallback(
     return await generateAIAnalysis(activity, section);
   } catch (error) {
     console.error(`AI generation failed for ${section}:`, error);
-    
+
     // Fall back to rule-based analysis
     return generateRuleBasedAnalysis(activity, section);
   }
@@ -800,18 +865,28 @@ function generateRuleBasedAnalysis(
 ): string {
   // Simple rule-based analysis as fallback
   switch (section) {
-    case 'performance_summary':
-      return `You completed ${(activity.distance / 1000).toFixed(2)}km in ${formatDuration(activity.movingTime)} with an average pace of ${activity.averagePace}/km.`;
-    
-    case 'pace_analysis':
+    case "performance_summary":
+      return `You completed ${(activity.distance / 1000).toFixed(
+        2
+      )}km in ${formatDuration(activity.movingTime)} with an average pace of ${
+        activity.averagePace
+      }/km.`;
+
+    case "pace_analysis":
       const paceVariation = calculatePaceVariation(activity.laps);
-      return `Your pace varied by ±${paceVariation}s/km across laps. ${paceVariation < 10 ? 'This shows good consistency.' : 'Consider working on more even pacing.'}`;
-    
-    case 'heart_rate':
+      return `Your pace varied by ±${paceVariation}s/km across laps. ${
+        paceVariation < 10
+          ? "This shows good consistency."
+          : "Consider working on more even pacing."
+      }`;
+
+    case "heart_rate":
       return `Average heart rate was ${activity.avgHR} bpm with a maximum of ${activity.maxHR} bpm during this effort.`;
-    
-    case 'consistency':
-      return `You maintained a relatively ${calculatePaceVariation(activity.laps) < 10 ? 'consistent' : 'variable'} effort throughout this workout.`;
+
+    case "consistency":
+      return `You maintained a relatively ${
+        calculatePaceVariation(activity.laps) < 10 ? "consistent" : "variable"
+      } effort throughout this workout.`;
   }
 }
 ```
@@ -847,7 +922,7 @@ class RateLimiter {
   }
 
   private sleep(ms: number): Promise<void> {
-    return new Promise(resolve => setTimeout(resolve, ms));
+    return new Promise((resolve) => setTimeout(resolve, ms));
   }
 }
 
@@ -862,16 +937,16 @@ const rateLimiter = new RateLimiter();
 // Generate analyses for multiple activities in background
 async function batchGenerateAnalyses(activityIds: number[]): Promise<void> {
   const BATCH_SIZE = 5;
-  
+
   for (let i = 0; i < activityIds.length; i += BATCH_SIZE) {
     const batch = activityIds.slice(i, i + BATCH_SIZE);
-    
+
     await Promise.all(
-      batch.map(id => 
+      batch.map((id) =>
         rateLimiter.throttle(() => generateAnalysisForActivity(id))
       )
     );
-    
+
     // Delay between batches
     await sleep(2000);
   }
@@ -887,10 +962,10 @@ async function generateAnalysisProgressive(
   onSectionComplete: (section: AnalysisSection, content: string) => void
 ): Promise<void> {
   const sections: AnalysisSection[] = [
-    'performance_summary',
-    'pace_analysis', 
-    'heart_rate',
-    'consistency'
+    "performance_summary",
+    "pace_analysis",
+    "heart_rate",
+    "consistency",
   ];
 
   for (const section of sections) {
@@ -905,8 +980,8 @@ async function generateAnalysisProgressive(
 ### Unit Tests
 
 ```typescript
-describe('AIAnalysisService', () => {
-  it('should generate analysis for all sections', async () => {
+describe("AIAnalysisService", () => {
+  it("should generate analysis for all sections", async () => {
     const analysis = await aiAnalysisService.generateAnalysis(mockActivity);
     expect(analysis.performance_summary).toBeDefined();
     expect(analysis.pace_analysis).toBeDefined();
@@ -914,23 +989,25 @@ describe('AIAnalysisService', () => {
     expect(analysis.consistency).toBeDefined();
   });
 
-  it('should cache generated analysis', async () => {
+  it("should cache generated analysis", async () => {
     await aiAnalysisService.generateAnalysis(mockActivity);
-    const cached = await aiAnalysisService.getCachedAnalysis(mockActivity.stravaId);
+    const cached = await aiAnalysisService.getCachedAnalysis(
+      mockActivity.stravaId
+    );
     expect(cached).toBeDefined();
   });
 
-  it('should use cached analysis when available', async () => {
-    const spy = jest.spyOn(puter.ai, 'chat');
-    
+  it("should use cached analysis when available", async () => {
+    const spy = jest.spyOn(puter.ai, "chat");
+
     // First call generates
     await aiAnalysisService.generateAnalysis(mockActivity);
     const callCount1 = spy.mock.calls.length;
-    
+
     // Second call uses cache
     await aiAnalysisService.generateAnalysis(mockActivity);
     const callCount2 = spy.mock.calls.length;
-    
+
     expect(callCount2).toBe(callCount1); // No new calls
   });
 });
@@ -939,25 +1016,25 @@ describe('AIAnalysisService', () => {
 ### Integration Tests
 
 ```typescript
-describe('Analysis API', () => {
-  it('POST /api/activities/:id/analyze generates analysis', async () => {
+describe("Analysis API", () => {
+  it("POST /api/activities/:id/analyze generates analysis", async () => {
     const response = await request(app)
       .post(`/api/activities/${testActivityId}/analyze`)
       .expect(200);
-    
+
     expect(response.body.success).toBe(true);
     expect(response.body.analysis).toBeDefined();
   });
 
-  it('GET /api/activities/:id/analysis retrieves cached', async () => {
+  it("GET /api/activities/:id/analysis retrieves cached", async () => {
     // First generate
     await request(app).post(`/api/activities/${testActivityId}/analyze`);
-    
+
     // Then retrieve
     const response = await request(app)
       .get(`/api/activities/${testActivityId}/analysis`)
       .expect(200);
-    
+
     expect(response.body.exists).toBe(true);
   });
 });
@@ -977,14 +1054,14 @@ interface AnalysisMetrics {
     performance_summary: number;
     pace_analysis: number;
     heart_rate: number;
-consistency: number;
+    consistency: number;
   };
 }
 
 // Log metrics for monitoring
 function logMetrics(metric: Partial<AnalysisMetrics>): void {
   // Send to monitoring service (e.g., Datadog, New Relic)
-  console.log('[METRICS]', JSON.stringify(metric));
+  console.log("[METRICS]", JSON.stringify(metric));
 }
 ```
 
@@ -1002,7 +1079,7 @@ interface AnalysisFeedback {
 
 // Use feedback to improve prompts over time
 async function collectFeedback(feedback: AnalysisFeedback): Promise<void> {
-  await db.collection('analysis_feedback').insertOne(feedback);
+  await db.collection("analysis_feedback").insertOne(feedback);
 }
 ```
 
@@ -1021,15 +1098,15 @@ interface TokenUsage {
 
 // Track daily token usage
 async function trackTokenUsage(tokensUsed: number): Promise<void> {
-  const today = new Date().toISOString().split('T')[0];
-  
-  await db.collection('token_usage').updateOne(
-    { date: today, model: 'gpt-4o' },
+  const today = new Date().toISOString().split("T")[0];
+
+  await db.collection("token_usage").updateOne(
+    { date: today, model: "gpt-4o" },
     {
       $inc: {
         total_tokens: tokensUsed,
-        analyses_generated: 1
-      }
+        analyses_generated: 1,
+      },
     },
     { upsert: true }
   );
@@ -1041,19 +1118,19 @@ async function trackTokenUsage(tokensUsed: number): Promise<void> {
 ```typescript
 const USAGE_LIMITS = {
   analyses_per_user_per_day: 10,
-  analyses_per_user_per_month: 100
+  analyses_per_user_per_month: 100,
 };
 
 async function checkUsageLimit(userId: string): Promise<boolean> {
-  const today = new Date().toISOString().split('T')[0];
-  
-  const todayCount = await db.collection('activity_analyses').countDocuments({
+  const today = new Date().toISOString().split("T")[0];
+
+  const todayCount = await db.collection("activity_analyses").countDocuments({
     userId,
-    'metadata.generated_at': {
-      $gte: new Date(today)
-    }
+    "metadata.generated_at": {
+      $gte: new Date(today),
+    },
   });
-  
+
   return todayCount < USAGE_LIMITS.analyses_per_user_per_day;
 }
 ```

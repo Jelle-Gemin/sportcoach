@@ -1,12 +1,12 @@
 'use client';
 
-import { useState } from 'react';
+import { act, useState } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
 import { useRouter } from 'next/navigation';
 import { useEffect } from 'react';
 import { useActivities } from '../../hooks/useActivities';
 import { ActivityFilters } from '../../components/activities/ActivityFilters';
-import { ActivityList } from '@/components/profile/ActivityList';
+import { ActivityList } from '@/components/activities/ActivityList';
 import { SyncControl } from '@/components/profile/SyncControl';
 import { AppLayout } from '../../components/layout/AppLayout';
 
@@ -102,9 +102,9 @@ export default function ActivitiesPage() {
     <AppLayout>
       <div className="max-w-4xl mx-auto space-y-8">
         {/* Header */}
-        <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm p-6">
-          <h1 className="text-3xl font-bold text-gray-900 dark:text-white">Activities</h1>
-          <p className="text-gray-600 dark:text-gray-300 mt-2">
+        <div className="bg-card rounded-lg shadow-sm p-6">
+          <h1 className="text-3xl font-bold text-gray-900">Activities</h1>
+          <p className="text-gray-600 mt-2">
             Browse and analyze all your synced Strava activities
           </p>
         </div>

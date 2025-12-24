@@ -76,8 +76,8 @@ export function ActivityCard({ activity, onClick }: ActivityCardProps) {
   return (
     <div
       onClick={handleClick}
-      className={`bg-white rounded-lg shadow-sm p-4 border border-gray-200 hover:shadow-md transition-shadow cursor-pointer ${
-        onClick ? 'hover:border-blue-300' : ''
+      className={`bg-card rounded-lg shadow-sm p-4 border border-gray-100 hover:bg-cardHover hover:shadow-md transition-all cursor-pointer ${
+        onClick ? 'hover:border-primary' : ''
       }`}
     >
       <div className="flex items-start justify-between">

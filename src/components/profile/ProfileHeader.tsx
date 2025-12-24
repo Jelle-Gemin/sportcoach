@@ -16,7 +16,7 @@ export function ProfileHeader({ athlete }: ProfileHeaderProps) {
   };
 
   return (
-    <div className="bg-white rounded-lg shadow-sm p-6 mb-6">
+    <div className="bg-card rounded-lg shadow-sm p-6 mb-6">
       <div className="flex flex-col md:flex-row items-start md:items-center space-y-4 md:space-y-0 md:space-x-6">
         {/* Avatar */}
         <div className="relative w-24 h-24 md:w-32 md:h-32 flex-shrink-0">

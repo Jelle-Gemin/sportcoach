@@ -12,7 +12,7 @@ export function WeeklySummaryCard() {
   };
 
   return (
-    <div className="bg-white rounded-lg shadow-sm p-6">
+    <div className="bg-card rounded-lg shadow-sm p-6">
       <div className="flex items-center mb-4">
         <div className="p-2 bg-blue-100 rounded-lg">
           <CalendarDaysIcon className="h-6 w-6 text-blue-600" />
@@ -64,7 +64,7 @@ export function WeeklySummaryCard() {
           </div>
         </div>
 
-        <button className="w-full inline-flex items-center justify-center px-4 py-2 border border-gray-300 rounded-md text-base font-medium text-gray-700 bg-white hover:bg-gray-50">
+        <button className="w-full inline-flex items-center justify-center px-4 py-2 border border-gray-300 rounded-md text-base font-medium text-gray-700 bg-cardhover:bg-gray-50">
           View Week Details
         </button>
       </div>

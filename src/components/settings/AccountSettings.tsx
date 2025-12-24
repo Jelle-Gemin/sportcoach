@@ -8,7 +8,7 @@ export function AccountSettings() {
 
   if (!isAuthenticated || !user) {
     return (
-      <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm p-6">
+      <div className="bg-card dark:bg-gray-800 rounded-lg shadow-sm p-6">
         <div className="flex items-center mb-4">
           <div className="p-2 bg-gray-100 dark:bg-gray-700 rounded-lg">
             <UserIcon className="h-6 w-6 text-gray-600 dark:text-gray-300" />
@@ -26,7 +26,7 @@ export function AccountSettings() {
   const location = [user.city, user.state, user.country].filter(Boolean).join(', ');
 
   return (
-    <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm p-6">
+    <div className="bg-card dark:bg-gray-800 rounded-lg shadow-sm p-6">
       <div className="flex items-center mb-4">
         <div className="p-2 bg-gray-100 dark:bg-gray-700 rounded-lg">
           <UserIcon className="h-6 w-6 text-gray-600 dark:text-gray-300" />

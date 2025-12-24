@@ -42,7 +42,7 @@ export function UpcomingWorkoutsCard() {
   };
 
   return (
-    <div className="bg-white rounded-lg shadow-sm p-6">
+    <div className="bg-card rounded-lg shadow-sm p-6">
       <h2 className="text-xl font-semibold text-gray-900 mb-6">
         Upcoming Workouts
       </h2>
@@ -70,7 +70,7 @@ export function UpcomingWorkoutsCard() {
         ))}
       </div>
 
-      <button className="w-full mt-6 inline-flex items-center justify-center px-4 py-2 border border-gray-300 rounded-md text-base font-medium text-gray-700 bg-white hover:bg-gray-50">
+      <button className="w-full mt-6 inline-flex items-center justify-center px-4 py-2 border border-gray-300 rounded-md text-base font-medium text-gray-700 bg-card hover:bg-gray-50">
         View Full Plan
       </button>
     </div>

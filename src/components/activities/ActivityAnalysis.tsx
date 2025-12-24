@@ -129,7 +129,7 @@ export function ActivityAnalysis({ activity, streams }: ActivityAnalysisProps) {
 
   if (loading) {
     return (
-      <div className="bg-white rounded-lg p-6 border border-gray-200">
+      <div className="bg-cardrounded-lg p-6 border border-gray-200">
         <div className="flex items-center justify-center p-12">
           <Loader2 className="w-8 h-8 animate-spin text-blue-500 mr-3" />
           <span className="text-gray-600">Generating AI insights...</span>
@@ -140,7 +140,7 @@ export function ActivityAnalysis({ activity, streams }: ActivityAnalysisProps) {
 
   if (error) {
     return (
-      <div className="bg-white rounded-lg p-6 border border-gray-200">
+      <div className="bg-card rounded-lg p-6 border border-gray-200">
         <div className="flex items-center justify-between mb-4">
           <h3 className="text-lg font-semibold text-gray-900">AI Analysis</h3>
           <button
@@ -206,7 +206,7 @@ export function ActivityAnalysis({ activity, streams }: ActivityAnalysisProps) {
   }
 
   return (
-    <div className="bg-white rounded-lg p-6 border border-gray-200">
+    <div className="bg-card rounded-lg p-6 border border-gray-200">
       <div className="flex items-center justify-between mb-4">
         <div className="flex items-center gap-2">
           <Sparkles className="w-6 h-6 text-blue-500" />

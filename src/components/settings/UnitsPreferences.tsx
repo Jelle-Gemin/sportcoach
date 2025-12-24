@@ -22,7 +22,7 @@ export function UnitsPreferences() {
   };
 
   return (
-    <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm p-6">
+    <div className="bg-card dark:bg-gray-800 rounded-lg shadow-sm p-6">
       <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
         Units & Preferences
       </h3>
@@ -125,7 +125,7 @@ export function UnitsPreferences() {
           <select
             value={settings.dateFormat}
             onChange={(e) => handleDateFormatChange(e.target.value)}
-            className="mt-1 block w-full border border-gray-300 dark:border-gray-600 rounded-md px-3 py-2 bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary"
+            className="mt-1 block w-full border border-gray-300 dark:border-gray-600 rounded-md px-3 py-2 bg-card dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary"
           >
             <option value="MM/DD/YYYY">MM/DD/YYYY</option>
             <option value="DD/MM/YYYY">DD/MM/YYYY</option>

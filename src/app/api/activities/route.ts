@@ -73,7 +73,7 @@ export async function GET(request: NextRequest) {
       // Transform ActivityDocument to StravaActivity format
       const transformedActivities: StravaActivity[] = result.activities.map(activity => ({
         id: activity.stravaId,
-        name: activity.description || `Activity ${activity.stravaId}`,
+        name: activity.name || `Activity ${activity.stravaId}`,
         distance: activity.distance || 0,
         moving_time: activity.movingTime || 0,
         elapsed_time: activity.elapsedTime || 0,

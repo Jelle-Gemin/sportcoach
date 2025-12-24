@@ -835,7 +835,6 @@ export class StravaSync {
     total: number;
     hasMore: boolean;
   }> {
-    console.log("Athlete Id: ", athleteId)
     // Handle potential type mismatch where athleteId might be stored as string or number
     const query: any = { athleteId: { $in: [athleteId, athleteId.toString()] } };
     if (type) query.type = type;

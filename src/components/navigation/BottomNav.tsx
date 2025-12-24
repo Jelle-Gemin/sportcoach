@@ -22,7 +22,7 @@ export function BottomNav() {
   const pathname = usePathname();
 
   return (
-    <div className="lg:hidden fixed bottom-0 left-0 right-0 z-50 bg-white border-t border-gray-200">
+    <div className="lg:hidden fixed bottom-0 left-0 right-0 z-50 bg-cardborder-t border-gray-200 bg-white">
       <nav className="flex">
         {navigation.map((item) => {
           const isActive = pathname === item.href;

@@ -18,7 +18,7 @@ export function AppLayout({ children }: AppLayoutProps) {
       <div className="lg:hidden">
         <button
           onClick={() => setSidebarOpen(true)}
-          className="fixed top-4 left-4 z-40 p-2 bg-white rounded-md shadow-md text-gray-600 hover:text-gray-900"
+          className="fixed top-4 left-4 z-40 p-2 bg-card rounded-md shadow-md text-gray-600 hover:text-gray-900"
         >
           <Bars3Icon className="h-6 w-6" />
         </button>

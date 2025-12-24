@@ -51,7 +51,7 @@ export function ActivityHeader({ activity }: ActivityHeaderProps) {
   };
 
   return (
-    <div className="bg-white rounded-lg shadow-sm p-6">
+    <div className="bg-card rounded-lg shadow-sm p-6">
       <div className="flex items-start space-x-4">
         <div className="text-4xl">{getActivityIcon(activity.type)}</div>
         <div className="flex-1">

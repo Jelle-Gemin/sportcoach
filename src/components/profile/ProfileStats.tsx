@@ -63,7 +63,7 @@ export function ProfileStats({ stats, measurementPreference }: ProfileStatsProps
   ];
 
   return (
-    <div className="bg-white rounded-lg shadow-sm p-6 mb-6">
+    <div className="bg-cardrounded-lg shadow-sm p-6 mb-6">
       <h2 className="text-xl font-semibold text-gray-900 mb-4">Activity Statistics</h2>
 
       {/* Tabs */}

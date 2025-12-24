@@ -8,7 +8,7 @@ interface LapBreakdownProps {
 export function LapBreakdown({ activity }: LapBreakdownProps) {
   if (!activity.laps || activity.laps.length === 0) {
     return (
-      <div className="bg-white rounded-lg p-6 border border-gray-200">
+      <div className="bg-card rounded-lg p-6 border border-gray-200">
         <h3 className="text-lg font-semibold text-gray-900 mb-4">Lap Breakdown</h3>
         <p className="text-gray-600">No lap data available for this activity.</p>
       </div>
@@ -39,7 +39,7 @@ export function LapBreakdown({ activity }: LapBreakdownProps) {
   };
 
   return (
-    <div className="bg-white rounded-lg p-6 border border-gray-200">
+    <div className="bg-card rounded-lg p-6 border border-gray-200">
       <h3 className="text-lg font-semibold text-gray-900 mb-4">Lap Breakdown</h3>
 
       <div className="overflow-x-auto">

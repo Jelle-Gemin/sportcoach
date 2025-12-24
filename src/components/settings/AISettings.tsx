@@ -19,7 +19,7 @@ export function AISettings() {
   };
 
   return (
-    <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm p-6">
+    <div className="bg-card dark:bg-gray-800 rounded-lg shadow-sm p-6">
       <div className="flex items-center mb-4">
         <div className="p-2 bg-purple-100 dark:bg-purple-900 rounded-lg">
           <CpuChipIcon className="h-6 w-6 text-purple-600 dark:text-purple-400" />

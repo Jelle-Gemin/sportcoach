@@ -28,7 +28,7 @@ export async function POST(request: NextRequest) {
 
     try {
       // Start the continuous historical sync
-      const result = await stravaSync.continuousHistoricalSync(accessToken);
+      const result = await stravaSync.continuousHistoricalSync(accessToken, userId);
 
       if (result.success) {
         return NextResponse.json({

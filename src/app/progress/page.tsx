@@ -36,7 +36,7 @@ export default function ProgressPage() {
       <AppLayout>
     <div className="max-w-7xl mx-auto space-y-8">
       {/* Header */}
-      <div className="bg-white rounded-lg shadow-sm p-6">
+      <div className="bg-cardrounded-lg shadow-sm p-6">
         <div className="flex items-center justify-between">
           <div>
             <h1 className="text-3xl font-bold text-gray-900">Training Progress</h1>
@@ -59,7 +59,7 @@ export default function ProgressPage() {
                 className={`px-4 py-2 text-sm font-medium rounded-md ${
                   timeRange === range.key
                     ? 'bg-primary text-white'
-                    : 'bg-white text-gray-700 border border-gray-300 hover:bg-gray-50'
+                    : 'bg-card text-gray-700 border border-gray-300 hover:bg-gray-50'
                 }`}
               >
                 {range.label}

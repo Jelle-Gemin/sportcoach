@@ -26,7 +26,7 @@ export function KeyMetricsCards() {
   return (
     <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
       {metrics.map((metric, index) => (
-        <div key={index} className="bg-white rounded-lg shadow-sm p-4">
+        <div key={index} className="bg-card rounded-lg shadow-sm p-4">
           <div className="text-sm font-medium text-gray-600 mb-1">
             {metric.label}
           </div>

@@ -48,28 +48,28 @@ export function ActivityMetrics({ activity }: ActivityMetricsProps) {
   return (
     <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
       {/* Row 1 */}
-      <div className="bg-white rounded-lg p-4 border border-gray-200">
+      <div className="bg-cardrounded-lg p-4 border border-gray-200">
         <div className="text-sm text-gray-600">Distance</div>
         <div className="text-xl font-semibold text-gray-900">
           {formatDistance(activity.distance)}
         </div>
       </div>
 
-      <div className="bg-white rounded-lg p-4 border border-gray-200">
+      <div className="bg-cardrounded-lg p-4 border border-gray-200">
         <div className="text-sm text-gray-600">Duration</div>
         <div className="text-xl font-semibold text-gray-900">
           {formatDuration(activity.moving_time)}
         </div>
       </div>
 
-      <div className="bg-white rounded-lg p-4 border border-gray-200">
+      <div className="bg-card rounded-lg p-4 border border-gray-200">
         <div className="text-sm text-gray-600">Pace</div>
         <div className="text-xl font-semibold text-gray-900">
           {formatPace(activity.average_speed)}
         </div>
       </div>
 
-      <div className="bg-white rounded-lg p-4 border border-gray-200">
+      <div className="bg-card rounded-lg p-4 border border-gray-200">
         <div className="text-sm text-gray-600">Elevation</div>
         <div className="text-xl font-semibold text-gray-900">
           {formatElevation(activity.total_elevation_gain)}
@@ -77,28 +77,28 @@ export function ActivityMetrics({ activity }: ActivityMetricsProps) {
       </div>
 
       {/* Row 2 */}
-      <div className="bg-white rounded-lg p-4 border border-gray-200">
+      <div className="bg-card rounded-lg p-4 border border-gray-200">
         <div className="text-sm text-gray-600">Avg HR</div>
         <div className="text-xl font-semibold text-gray-900">
           {formatHeartRate(activity.average_heartrate)}
         </div>
       </div>
 
-      <div className="bg-white rounded-lg p-4 border border-gray-200">
+      <div className="bg-card rounded-lg p-4 border border-gray-200">
         <div className="text-sm text-gray-600">Max HR</div>
         <div className="text-xl font-semibold text-gray-900">
           {formatHeartRate(activity.max_heartrate)}
         </div>
       </div>
 
-      <div className="bg-white rounded-lg p-4 border border-gray-200">
+      <div className="bg-card rounded-lg p-4 border border-gray-200">
         <div className="text-sm text-gray-600">Cadence</div>
         <div className="text-xl font-semibold text-gray-900">
           {formatCadence(activity.average_cadence)}
         </div>
       </div>
 
-      <div className="bg-white rounded-lg p-4 border border-gray-200">
+      <div className="bg-card rounded-lg p-4 border border-gray-200">
         <div className="text-sm text-gray-600">Calories</div>
         <div className="text-xl font-semibold text-gray-900">
           {formatCalories(activity.calories)}

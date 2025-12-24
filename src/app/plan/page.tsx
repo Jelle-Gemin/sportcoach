@@ -39,7 +39,7 @@ export default function PlanPage() {
       <PlanHeader />
 
       {/* Current Week Progress */}
-      <div className="bg-white rounded-lg shadow-sm p-6">
+      <div className="bg-card rounded-lg shadow-sm p-6">
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-xl font-semibold text-gray-900">
             Week {currentWeek}: Base Building
@@ -71,7 +71,7 @@ export default function PlanPage() {
       <div className="flex items-center justify-between">
         <button
           onClick={() => setCurrentWeek(Math.max(1, currentWeek - 1))}
-          className="inline-flex items-center px-4 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 bg-white hover:bg-gray-50"
+          className="inline-flex items-center px-4 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 bg-card hover:bg-gray-50"
         >
           ← Previous Week
         </button>
@@ -92,7 +92,7 @@ export default function PlanPage() {
 
         <button
           onClick={() => setCurrentWeek(Math.min(16, currentWeek + 1))}
-          className="inline-flex items-center px-4 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 bg-white hover:bg-gray-50"
+          className="inline-flex items-center px-4 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 bg-card hover:bg-gray-50"
         >
           Next Week →
         </button>

@@ -39,7 +39,7 @@ export default function SettingsPage() {
     <SettingsProvider>
       <div className="max-w-4xl mx-auto space-y-8">
         {/* Header */}
-        <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm p-6">
+        <div className="bg-carddark:bg-gray-800 rounded-lg shadow-sm p-6">
           <h1 className="text-3xl font-bold text-gray-900 dark:text-white">Settings</h1>
           <p className="text-gray-600 dark:text-gray-300 mt-2">
             Manage your account preferences and app settings

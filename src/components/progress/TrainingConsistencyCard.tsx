@@ -39,7 +39,7 @@ export function TrainingConsistencyCard() {
   };
 
   return (
-    <div className="bg-white rounded-lg shadow-sm p-6">
+    <div className="bg-card rounded-lg shadow-sm p-6">
       <div className="flex items-center mb-4">
         <div className="p-2 bg-blue-100 rounded-lg">
           <CalendarDaysIcon className="h-6 w-6 text-blue-600" />

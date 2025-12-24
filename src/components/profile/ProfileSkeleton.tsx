@@ -4,7 +4,7 @@ export function ProfileSkeleton() {
   return (
     <div className="space-y-6">
       {/* Profile Header Skeleton */}
-      <div className="bg-white rounded-lg shadow-sm p-6">
+      <div className="bg-card rounded-lg shadow-sm p-6">
         <div className="flex flex-col md:flex-row items-start md:items-center space-y-4 md:space-y-0 md:space-x-6">
           {/* Avatar Skeleton */}
           <div className="w-24 h-24 md:w-32 md:h-32 bg-gray-200 rounded-full animate-pulse flex-shrink-0"></div>
@@ -24,7 +24,7 @@ export function ProfileSkeleton() {
       </div>
 
       {/* Stats Skeleton */}
-      <div className="bg-white rounded-lg shadow-sm p-6">
+      <div className="bg-card rounded-lg shadow-sm p-6">
         <div className="h-6 bg-gray-200 rounded animate-pulse w-1/3 mb-4"></div>
 
         {/* Tabs Skeleton */}
@@ -52,7 +52,7 @@ export function ProfileSkeleton() {
       </div>
 
       {/* Activities Skeleton */}
-      <div className="bg-white rounded-lg shadow-sm p-6">
+      <div className="bg-card rounded-lg shadow-sm p-6">
         <div className="h-6 bg-gray-200 rounded animate-pulse w-1/3 mb-4"></div>
         <div className="space-y-3">
           {[...Array(5)].map((_, i) => (

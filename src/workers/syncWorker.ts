@@ -1,13 +1,15 @@
 import { StravaSync } from '../services/stravaSync';
+import { fetchAthlete } from '../services/stravaApi';
 
 async function runContinuousSync(accessToken: string, mongoUri: string, dbName: string) {
   const stravaSync = new StravaSync(mongoUri, dbName);
   await stravaSync.connect();
 
   try {
-    console.log('Starting continuous historical sync in worker');
-    const result = await stravaSync.continuousHistoricalSync(accessToken);
-    console.log('Continuous sync completed:', result);
+    const athlete = await fetchAthlete(accessToken);
+    const athleteId = athlete.id;
+
+    const result = await stravaSync.continuousHistoricalSync(accessToken, athleteId);
     process.exit(result.success ? 0 : 1);
   } catch (error) {
     console.error('Continuous sync failed:', error);

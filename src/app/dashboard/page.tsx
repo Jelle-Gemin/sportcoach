@@ -38,7 +38,7 @@ export default function DashboardPage() {
     <AppLayout>
       <div className="max-w-7xl mx-auto space-y-8">
         {/* Header */}
-        <div className="bg-white rounded-lg shadow-sm p-6">
+        <div className="bg-card rounded-lg shadow-sm p-6">
           <h1 className="text-3xl font-bold text-gray-900">
             Welcome back, Athlete!
           </h1>

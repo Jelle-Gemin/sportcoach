@@ -35,7 +35,7 @@ export function SyncSettings() {
   };
 
   return (
-    <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm p-6">
+    <div className="bg-card dark:bg-gray-800 rounded-lg shadow-sm p-6">
       <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
         Sync Settings
       </h3>
@@ -77,7 +77,7 @@ export function SyncSettings() {
           <select
             value={settings.syncFrequency}
             onChange={(e) => handleFrequencyChange(e.target.value)}
-            className="mt-1 block w-full border border-gray-300 dark:border-gray-600 rounded-md px-3 py-2 bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary"
+            className="mt-1 block w-full border border-gray-300 dark:border-gray-600 rounded-md px-3 py-2 bg-card dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary"
           >
             <option>Every hour</option>
             <option>Every 6 hours</option>
@@ -103,7 +103,7 @@ export function SyncSettings() {
           <button
             onClick={handleFullSync}
             disabled={isSyncing}
-            className="inline-flex items-center px-4 py-2 border border-primary rounded-md text-sm font-medium text-primary bg-white dark:bg-gray-800 hover:bg-primary hover:text-white disabled:opacity-50 disabled:cursor-not-allowed"
+            className="inline-flex items-center px-4 py-2 border border-primary rounded-md text-sm font-medium text-primary bg-card dark:bg-gray-800 hover:bg-primary hover:text-white disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {isSyncing ? 'Syncing...' : 'Start Full Sync'}
           </button>

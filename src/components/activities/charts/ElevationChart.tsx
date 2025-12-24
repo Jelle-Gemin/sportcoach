@@ -10,7 +10,7 @@ interface ElevationChartProps {
 export function ElevationChart({ streams }: ElevationChartProps) {
   if (!streams?.altitude?.data || !streams?.distance?.data) {
     return (
-      <div className="bg-white rounded-lg shadow-sm p-6">
+      <div className="bg-card rounded-lg shadow-sm p-6">
         <h3 className="text-lg font-semibold text-gray-900 mb-4">Elevation Profile</h3>
         <div className="h-64 flex items-center justify-center text-gray-500">
           No elevation data available
@@ -26,7 +26,7 @@ export function ElevationChart({ streams }: ElevationChartProps) {
   })).filter(point => point.elevation !== null);
 
   return (
-    <div className="bg-white rounded-lg shadow-sm p-6">
+    <div className="bg-card rounded-lg shadow-sm p-6">
       <h3 className="text-lg font-semibold text-gray-900 mb-4">Elevation Profile</h3>
       <div className="h-64">
         <ResponsiveContainer width="100%" height="100%">

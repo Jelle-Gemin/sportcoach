@@ -12,7 +12,7 @@ export function AIInsightsCard() {
   ];
 
   return (
-    <div className="bg-white rounded-lg shadow-sm p-6">
+    <div className="bg-cardrounded-lg shadow-sm p-6">
       <div className="flex items-center mb-4">
         <div className="p-2 bg-yellow-100 rounded-lg">
           <LightBulbIcon className="h-6 w-6 text-yellow-600" />

@@ -18,7 +18,7 @@ export function TodaysWorkoutCard() {
   };
 
   return (
-    <div className="bg-white rounded-lg shadow-sm p-6">
+    <div className="bg-card rounded-lg shadow-sm p-6">
       <div className="flex items-center mb-4">
         <div className="p-2 bg-green-100 rounded-lg">
           <PlayIcon className="h-6 w-6 text-green-600" />

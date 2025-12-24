@@ -14,7 +14,7 @@ export function CurrentPlanCard() {
   };
 
   return (
-    <div className="bg-white rounded-lg shadow-sm p-6">
+    <div className="bg-card rounded-lg shadow-sm p-6">
       <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between">
         <div className="mb-4 lg:mb-0">
           <h2 className="text-xl font-semibold text-gray-900">
@@ -29,11 +29,11 @@ export function CurrentPlanCard() {
         </div>
 
         <div className="flex space-x-3">
-          <button className="inline-flex items-center px-4 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 bg-white hover:bg-gray-50">
+          <button className="inline-flex items-center px-4 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 bg-card hover:bg-gray-50">
             <PencilIcon className="h-4 w-4 mr-2" />
             Edit Plan
           </button>
-          <button className="inline-flex items-center px-4 py-2 border border-primary rounded-md text-sm font-medium text-primary bg-white hover:bg-primary hover:text-white">
+          <button className="inline-flex items-center px-4 py-2 border border-primary rounded-md text-sm font-medium text-primary bg-card hover:bg-primary hover:text-white">
             <SparklesIcon className="h-4 w-4 mr-2" />
             Generate New Plan
           </button>
