@@ -1,6 +1,15 @@
 import type { NextConfig } from "next";
 
+// Optional bundle analyzer - enabled with ANALYZE=true environment variable
+const withBundleAnalyzer =
+  process.env.ANALYZE === "true"
+    ? require("@next/bundle-analyzer")({ enabled: true })
+    : (config: NextConfig) => config;
+
 const nextConfig: NextConfig = {
+  // Enable gzip compression
+  compress: true,
+
   images: {
     remotePatterns: [
       {
@@ -17,6 +26,12 @@ const nextConfig: NextConfig = {
       },
     ],
   },
+
+  // Experimental optimizations
+  experimental: {
+    // Optimize CSS for smaller bundles
+    optimizeCss: true,
+  },
 };
 
-export default nextConfig;
+export default withBundleAnalyzer(nextConfig);

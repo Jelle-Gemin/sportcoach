@@ -1,7 +1,22 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { cookies } from 'next/headers';
-import { StravaSync } from '@/services/stravaSync';
+import { getDb } from '@/lib/mongodb';
 import { StravaActivity } from '@/services/stravaApi';
+
+// Cache for 5 minutes with stale-while-revalidate
+const CACHE_HEADERS = {
+  'Cache-Control': 'public, s-maxage=300, stale-while-revalidate=600',
+};
+
+// Projection for list view - exclude heavy fields
+const LIST_PROJECTION = {
+  streams: 0,
+  laps: 0,
+  splits_metric: 0,
+  splits_standard: 0,
+  segment_efforts: 0,
+  photos: 0,
+};
 
 export async function GET(request: NextRequest) {
   try {
@@ -16,7 +31,6 @@ export async function GET(request: NextRequest) {
     // Check if token is expired and refresh if needed
     const now = Date.now() / 1000;
     if (expiresAt && now > parseInt(expiresAt)) {
-      // Token is expired, try to refresh
       const refreshToken = cookieStore.get('refreshToken')?.value;
       if (!refreshToken) {
         return NextResponse.json({ error: 'Token expired and no refresh token available' }, { status: 401 });
@@ -25,9 +39,7 @@ export async function GET(request: NextRequest) {
       try {
         const refreshResponse = await fetch(`${process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000'}/api/auth/refresh`, {
           method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
+          headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ refreshToken }),
         });
 
@@ -59,57 +71,73 @@ export async function GET(request: NextRequest) {
     const startDate = searchParams.get('startDate') ? new Date(searchParams.get('startDate')!) : undefined;
     const endDate = searchParams.get('endDate') ? new Date(searchParams.get('endDate')!) : undefined;
 
-    // Initialize MongoDB connection
-    const mongoUri = process.env.MONGODB_URI || 'mongodb://localhost:27017';
-    const dbName = process.env.MONGODB_DB_NAME || 'strava_data';
+    // Use connection pool
+    const db = await getDb();
+    const activitiesCollection = db.collection('activities');
 
-    const stravaSync = new StravaSync(mongoUri, dbName);
-    await stravaSync.connect();
-
-    try {
-      // Immediately return activities from database
-      const result = await stravaSync.getActivities(athleteId, limit, offset, type, startDate, endDate);
-
-      // Transform ActivityDocument to StravaActivity format
-      const transformedActivities: StravaActivity[] = result.activities.map(activity => ({
-        id: activity.stravaId,
-        name: activity.name || `Activity ${activity.stravaId}`,
-        distance: activity.distance || 0,
-        moving_time: activity.movingTime || 0,
-        elapsed_time: activity.elapsedTime || 0,
-        total_elevation_gain: activity.total_elevation_gain || 0,
-        type: activity.type || 'Workout',
-        sport_type: activity.type || 'Workout',
-        start_date: activity.date.toISOString(),
-        start_date_local: activity.date.toISOString(),
-        timezone: 'UTC',
-        average_speed: activity.average_speed || 0,
-        max_speed: activity.max_speed || 0,
-        has_heartrate: !!(activity.avgHR || activity.maxHR),
-        average_heartrate: activity.avgHR,
-        max_heartrate: activity.maxHR,
-        elev_high: activity.elev_high, 
-        elev_low: activity.elev_low, 
-        achievement_count: 0, // Not stored in DB
-        kudos_count: 0, // Not stored in DB
-        comment_count: 0, // Not stored in DB
-        athlete_count: 1, // Not stored in DB
-        photo_count: 0, // Not stored in DB
-        map: {
-          id: `map_${activity.stravaId}`,
-          summary_polyline: undefined,
-          resource_state: 2,
-        },
-      }));
-
-      return NextResponse.json({
-        activities: transformedActivities,
-        total: result.total,
-        hasMore: result.hasMore
-      });
-    } finally {
-      await stravaSync.disconnect();
+    // Build query
+    const query: Record<string, unknown> = {
+      athleteId: { $in: [athleteId, athleteId.toString()] }
+    };
+    if (type) query.type = type;
+    if (startDate || endDate) {
+      query.date = {};
+      if (startDate) (query.date as Record<string, Date>).$gte = startDate;
+      if (endDate) (query.date as Record<string, Date>).$lte = endDate;
     }
+
+    // Use Promise.all for parallel queries
+    const [total, activities] = await Promise.all([
+      activitiesCollection.countDocuments(query),
+      activitiesCollection
+        .find(query)
+        .project(LIST_PROJECTION)  // Exclude heavy fields
+        .sort({ date: -1 })
+        .skip(offset)
+        .limit(limit)
+        .toArray()
+    ]);
+
+    // Transform ActivityDocument to StravaActivity format
+    const transformedActivities: StravaActivity[] = activities.map(activity => ({
+      id: activity.stravaId,
+      name: activity.name || `Activity ${activity.stravaId}`,
+      distance: activity.distance || 0,
+      moving_time: activity.movingTime || activity.moving_time || 0,
+      elapsed_time: activity.elapsedTime || activity.elapsed_time || 0,
+      total_elevation_gain: activity.total_elevation_gain || 0,
+      type: activity.type || 'Workout',
+      sport_type: activity.type || 'Workout',
+      start_date: activity.date?.toISOString() || activity.start_date,
+      start_date_local: activity.date?.toISOString() || activity.start_date_local,
+      timezone: activity.timezone || 'UTC',
+      average_speed: activity.average_speed || 0,
+      max_speed: activity.max_speed || 0,
+      has_heartrate: !!(activity.avgHR || activity.maxHR || activity.average_heartrate),
+      average_heartrate: activity.avgHR || activity.average_heartrate,
+      max_heartrate: activity.maxHR || activity.max_heartrate,
+      elev_high: activity.elev_high,
+      elev_low: activity.elev_low,
+      achievement_count: 0,
+      kudos_count: 0,
+      comment_count: 0,
+      athlete_count: 1,
+      photo_count: 0,
+      map: {
+        id: `map_${activity.stravaId}`,
+        summary_polyline: activity.map?.summary_polyline,
+        resource_state: 2,
+      },
+    }));
+
+    return NextResponse.json(
+      {
+        activities: transformedActivities,
+        total,
+        hasMore: offset + limit < total,
+      },
+      { headers: CACHE_HEADERS }
+    );
   } catch (error) {
     console.error('Activities API error:', error);
     return NextResponse.json(
@@ -118,5 +146,3 @@ export async function GET(request: NextRequest) {
     );
   }
 }
-
-

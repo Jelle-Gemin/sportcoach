@@ -1,73 +1,52 @@
+import { useQuery } from '@tanstack/react-query';
 import { StravaAthlete, AthleteStats } from '@/services/stravaApi';
-import { useState, useEffect } from 'react';
 
-interface UseProfileReturn {
+interface ProfileData {
   athlete: StravaAthlete | null;
   stats: AthleteStats | null;
-  loading: boolean;
-  error: string | null;
-  refetch: () => Promise<void>;
 }
 
-export function useProfile(): UseProfileReturn {
-  const [athlete, setAthlete] = useState<StravaAthlete | null>(null);
-  const [stats, setStats] = useState<AthleteStats | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+export function useProfile() {
+  const query = useQuery({
+    queryKey: ['profile'],
+    queryFn: async (): Promise<ProfileData> => {
+      const response = await fetch('/api/profile');
 
-  const fetchProfile = async () => {
-    try {
-      setLoading(true);
-      setError(null);
-
-      // Fetch athlete profile and stats
-      const profileResponse = await fetch('/api/profile');
-      if (!profileResponse.ok) {
-        if (profileResponse.status === 401) {
+      if (!response.ok) {
+        if (response.status === 401) {
           throw new Error('Authentication required');
         }
-        if (profileResponse.status === 429) {
-          // Rate limit hit - try to get data from response anyway (API may return cached data)
+        if (response.status === 429) {
+          // Rate limit hit - try to get data from response anyway
           try {
-            const { athlete: athleteData, stats: statsData } = await profileResponse.json();
-            if (athleteData) {
-              setAthlete(athleteData);
-              setStats(statsData);
-              return;
+            const { athlete, stats } = await response.json();
+            if (athlete) {
+              return { athlete, stats };
             }
-          } catch (parseError) {
+          } catch {
             // If parsing fails, throw rate limit error
           }
           throw new Error('Rate limit exceeded. Please try again later.');
         }
         throw new Error('Failed to fetch profile');
       }
-      const { athlete: athleteData, stats: statsData } = await profileResponse.json();
-      setAthlete(athleteData);
-      setStats(statsData);
 
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'An error occurred');
-      setAthlete(null);
-      setStats(null);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const refetch = async () => {
-    await fetchProfile();
-  };
-
-  useEffect(() => {
-    fetchProfile();
-  }, []);
+      const { athlete, stats } = await response.json();
+      return { athlete, stats };
+    },
+    staleTime: 30 * 60 * 1000, // 30 minutes - profile rarely changes
+    retry: (failureCount, error) => {
+      // Don't retry on auth errors
+      if (error.message === 'Authentication required') return false;
+      return failureCount < 2;
+    },
+  });
 
   return {
-    athlete,
-    stats,
-    loading,
-    error,
-    refetch
+    athlete: query.data?.athlete ?? null,
+    stats: query.data?.stats ?? null,
+    loading: query.isLoading,
+    error: query.error?.message ?? null,
+    refetch: query.refetch,
   };
 }

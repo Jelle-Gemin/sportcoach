@@ -1,53 +1,27 @@
-import { useState, useEffect } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { fetchAllActivityIds } from '../services/stravaApi';
 import { useAuth } from '../contexts/AuthContext';
 
-// Simple in-memory cache with TTL
-const cache = new Map<string, { data: number; timestamp: number }>();
-const CACHE_TTL = 15 * 60 * 1000; // 15 minutes
-
 export function useTotalActivities() {
-  const [totalActivities, setTotalActivities] = useState<number | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
   const { accessToken } = useAuth();
 
-  useEffect(() => {
-    const loadTotalActivities = async () => {
-      if (!accessToken) return;
-
-      const cacheKey = `totalActivities_${accessToken}`;
-      const cached = cache.get(cacheKey);
-      const now = Date.now();
-
-      if (cached && (now - cached.timestamp) < CACHE_TTL) {
-        setTotalActivities(cached.data);
-        return;
+  const query = useQuery({
+    queryKey: ['totalActivities', accessToken],
+    queryFn: async () => {
+      if (!accessToken) {
+        throw new Error('No access token');
       }
-
-      setLoading(true);
-      setError(null);
-
-      try {
-        const activityIds = await fetchAllActivityIds(accessToken);
-        const count = activityIds.length;
-        setTotalActivities(count);
-
-        // Cache the result
-        cache.set(cacheKey, { data: count, timestamp: now });
-      } catch (err) {
-        setError(err instanceof Error ? err.message : 'Failed to fetch total activities');
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    loadTotalActivities();
-  }, [accessToken]);
+      const activityIds = await fetchAllActivityIds(accessToken);
+      return activityIds.length;
+    },
+    enabled: !!accessToken,
+    staleTime: 15 * 60 * 1000, // 15 minutes - expensive API call
+    retry: false, // Don't retry on Strava API rate limit
+  });
 
   return {
-    totalActivities,
-    loading,
-    error,
+    totalActivities: query.data ?? null,
+    loading: query.isLoading,
+    error: query.error?.message ?? null,
   };
 }

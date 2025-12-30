@@ -830,7 +830,7 @@ export class StravaSync {
     return `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
   }
 
-  async getActivities(athleteId: number, limit: number = 50, offset: number = 0, type?: string, startDate?: Date, endDate?: Date): Promise<{
+  async getActivities(athleteId: number, limit: number = 50, offset: number = 0, type?: string, startDate?: Date, endDate?: Date, projection?: any): Promise<{
     activities: ActivityDocument[];
     total: number;
     hasMore: boolean;
@@ -845,17 +845,26 @@ export class StravaSync {
     }
 
     const total = await this.activitiesCollection.countDocuments(query);
-    const activities = await this.activitiesCollection
+    let findQuery = this.activitiesCollection
       .find(query)
       .sort({ date: -1 })
-      .skip(offset)
-      .limit(limit)
-      .toArray();
+      .skip(offset);
+
+    if (limit > 0) {
+      findQuery = findQuery.limit(limit);
+    }
+
+    if (projection) {
+      findQuery = findQuery.project(projection);
+    }
+
+    const activities = await findQuery.toArray();
+    console.log("First activity: ", activities[0])
 
     return {
       activities,
       total,
-      hasMore: offset + limit < total,
+      hasMore: limit > 0 ? offset + limit < total : false,
     };
   }
 

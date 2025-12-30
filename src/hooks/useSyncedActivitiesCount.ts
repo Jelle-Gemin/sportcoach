@@ -1,22 +1,14 @@
-import { useState, useEffect } from 'react';
+import { useQuery } from '@tanstack/react-query';
 
-interface UseSyncedActivitiesCountReturn {
-  syncedCount: number | null;
-  loading: boolean;
-  error: string | null;
-  refetch: () => Promise<void>;
+interface SyncedActivitiesCountData {
+  syncedCount: number;
+  total: number;
 }
 
-export function useSyncedActivitiesCount(): UseSyncedActivitiesCountReturn {
-  const [syncedCount, setSyncedCount] = useState<number | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  const fetchSyncedCount = async () => {
-    try {
-      setLoading(true);
-      setError(null);
-
+export function useSyncedActivitiesCount() {
+  const query = useQuery({
+    queryKey: ['syncedActivitiesCount'],
+    queryFn: async (): Promise<SyncedActivitiesCountData> => {
       const response = await fetch('/api/activities?limit=0');
 
       if (!response.ok) {
@@ -24,22 +16,18 @@ export function useSyncedActivitiesCount(): UseSyncedActivitiesCountReturn {
       }
 
       const data = await response.json();
-      setSyncedCount(data.total || 0);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to fetch synced activities count');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    fetchSyncedCount();
-  }, []);
+      return {
+        syncedCount: data.total || 0,
+        total: data.total || 0,
+      };
+    },
+    staleTime: 2 * 60 * 1000, // 2 minutes - may change during sync
+  });
 
   return {
-    syncedCount,
-    loading,
-    error,
-    refetch: fetchSyncedCount,
+    syncedCount: query.data?.syncedCount ?? null,
+    loading: query.isLoading,
+    error: query.error?.message ?? null,
+    refetch: query.refetch,
   };
 }

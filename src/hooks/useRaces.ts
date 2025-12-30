@@ -1,132 +1,155 @@
-import { useState, useEffect } from 'react';
-import { Race, CreateRaceInput, UpdateRaceInput, RaceResponse } from '@/types/race';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { CreateRaceInput, UpdateRaceInput, RaceResponse } from '@/types/race';
 
-// Simple in-memory cache with TTL
-const cache = new Map<string, { data: RaceResponse[]; timestamp: number }>();
-const CACHE_TTL = 15 * 60 * 1000; // 15 minutes
-
-interface UseRacesReturn {
+interface RacesData {
   races: RaceResponse[];
-  plannedRaces: RaceResponse[];
-  completedRaces: RaceResponse[];
-  loading: boolean;
-  error: string | null;
-  addRace: (race: CreateRaceInput) => Promise<RaceResponse>;
-  updateRace: (id: string, updates: UpdateRaceInput) => Promise<RaceResponse>;
-  deleteRace: (id: string) => Promise<void>;
-  completeRace: (id: string, finishTime: number) => Promise<void>;
-  skipRace: (id: string, reason?: string) => Promise<void>;
-  refreshRaces: () => Promise<void>;
+  stats?: {
+    totalPlanned: number;
+    totalCompleted: number;
+    totalSkipped: number;
+  };
 }
 
-export function useRaces(): UseRacesReturn {
-  const [races, setRaces] = useState<RaceResponse[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+export function useRaces() {
+  const queryClient = useQueryClient();
 
-  // Fetch races on mount
-  useEffect(() => {
-    fetchRaces();
-  }, []);
-
-  const fetchRaces = async () => {
-    try {
-      setLoading(true);
-      const response = await fetch("/api/races?includeEstimates=true");
+  // Query for fetching races
+  const query = useQuery({
+    queryKey: ['races'],
+    queryFn: async (): Promise<RacesData> => {
+      const response = await fetch('/api/races?includeEstimates=true');
       const data = await response.json();
-      setRaces(data.races || []);
-    } catch (err) {
-      setError("Failed to load races");
-      setRaces([]);
-    } finally {
-      setLoading(false);
-    }
-  };
+      return { races: data.races || [], stats: data.stats };
+    },
+    staleTime: 5 * 60 * 1000, // 5 minutes
+  });
 
-  const addRace = async (input: CreateRaceInput) => {
-    const response = await fetch("/api/races", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(input),
-    });
+  // Add race mutation
+  const addMutation = useMutation({
+    mutationFn: async (input: CreateRaceInput) => {
+      const response = await fetch('/api/races', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(input),
+      });
+      const data = await response.json();
+      return data.race as RaceResponse;
+    },
+    onSuccess: (newRace) => {
+      queryClient.setQueryData<RacesData>(['races'], (old) => ({
+        races: [...(old?.races || []), newRace],
+        stats: old?.stats,
+      }));
+    },
+  });
 
-    const data = await response.json();
-    setRaces([...races, data.race]);
-    // Invalidate cache
-    cache.delete('races');
-    return data.race;
-  };
+  // Update race mutation
+  const updateMutation = useMutation({
+    mutationFn: async ({ id, updates }: { id: string; updates: UpdateRaceInput }) => {
+      const response = await fetch(`/api/races/${id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(updates),
+      });
+      const data = await response.json();
+      return data.race as RaceResponse;
+    },
+    onSuccess: (updatedRace) => {
+      // Update cache with the actual response from server
+      queryClient.setQueryData<RacesData>(['races'], (old) => ({
+        races: (old?.races || []).map((r) =>
+          r._id === updatedRace._id ? updatedRace : r
+        ),
+        stats: old?.stats,
+      }));
+    },
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: ['races'] });
+    },
+  });
 
-  const updateRace = async (id: string, updates: UpdateRaceInput) => {
-    const response = await fetch(`/api/races/${id}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(updates),
-    });
+  // Delete race mutation with optimistic update
+  const deleteMutation = useMutation({
+    mutationFn: async (id: string) => {
+      await fetch(`/api/races/${id}`, { method: 'DELETE' });
+    },
+    onMutate: async (id) => {
+      await queryClient.cancelQueries({ queryKey: ['races'] });
+      const previous = queryClient.getQueryData<RacesData>(['races']);
+      queryClient.setQueryData<RacesData>(['races'], (old) => ({
+        races: (old?.races || []).filter((r) => r._id !== id),
+        stats: old?.stats,
+      }));
+      return { previous };
+    },
+    onError: (err, id, context) => {
+      if (context?.previous) {
+        queryClient.setQueryData(['races'], context.previous);
+      }
+    },
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: ['races'] });
+    },
+  });
 
-    const data = await response.json();
-    setRaces(races.map((r) => (r._id === id ? data.race : r)));
-    // Invalidate cache
-    cache.delete('races');
-    return data.race;
-  };
+  // Complete race mutation
+  const completeMutation = useMutation({
+    mutationFn: async ({ id, finishTime }: { id: string; finishTime: number }) => {
+      const response = await fetch(`/api/races/${id}/complete`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ actualFinishTime: finishTime }),
+      });
+      const data = await response.json();
+      return data.race as RaceResponse;
+    },
+    onSuccess: (updatedRace) => {
+      queryClient.setQueryData<RacesData>(['races'], (old) => ({
+        races: (old?.races || []).map((r) =>
+          r._id === updatedRace._id ? updatedRace : r
+        ),
+        stats: old?.stats,
+      }));
+    },
+  });
 
-  const deleteRace = async (id: string) => {
-    await fetch(`/api/races/${id}`, {
-      method: "DELETE",
-    });
+  // Skip race mutation
+  const skipMutation = useMutation({
+    mutationFn: async ({ id, reason }: { id: string; reason?: string }) => {
+      const response = await fetch(`/api/races/${id}/skip`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ skipReason: reason }),
+      });
+      const data = await response.json();
+      return data.race as RaceResponse;
+    },
+    onSuccess: (updatedRace) => {
+      queryClient.setQueryData<RacesData>(['races'], (old) => ({
+        races: (old?.races || []).map((r) =>
+          r._id === updatedRace._id ? updatedRace : r
+        ),
+        stats: old?.stats,
+      }));
+    },
+  });
 
-    setRaces(races.filter((r) => r._id !== id));
-    // Invalidate cache
-    cache.delete('races');
-  };
-
-  const completeRace = async (id: string, finishTime: number) => {
-    const response = await fetch(`/api/races/${id}/complete`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ actualFinishTime: finishTime }),
-    });
-
-    const data = await response.json();
-
-    // Update local state
-    setRaces(races.map((r) => (r._id === id ? data.race : r)));
-    // Invalidate cache
-    cache.delete('races');
-  };
-
-  const skipRace = async (id: string, reason?: string) => {
-    const response = await fetch(`/api/races/${id}/skip`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ skipReason: reason }),
-    });
-
-    const data = await response.json();
-
-    // Update local state
-    setRaces(races.map((r) => (r._id === id ? data.race : r)));
-    // Invalidate cache
-    cache.delete('races');
-  };
-
-  const refreshRaces = async () => {
-    cache.delete('races');
-    await fetchRaces();
-  };
+  const races = query.data?.races || [];
 
   return {
-    races: (races || []).filter(Boolean),
-    plannedRaces: (races || []).filter((r) => r && r.status === "planned"),
-    completedRaces: (races || []).filter((r) => r && r.status === "completed"),
-    loading,
-    error,
-    addRace,
-    updateRace,
-    deleteRace,
-    completeRace,
-    skipRace,
-    refreshRaces,
+    races: races.filter(Boolean),
+    plannedRaces: races.filter((r) => r && r.status === 'planned'),
+    completedRaces: races.filter((r) => r && r.status === 'completed'),
+    loading: query.isLoading,
+    error: query.error?.message ?? null,
+    addRace: addMutation.mutateAsync,
+    updateRace: (id: string, updates: UpdateRaceInput) =>
+      updateMutation.mutateAsync({ id, updates }),
+    deleteRace: deleteMutation.mutateAsync,
+    completeRace: (id: string, finishTime: number) =>
+      completeMutation.mutateAsync({ id, finishTime }),
+    skipRace: (id: string, reason?: string) =>
+      skipMutation.mutateAsync({ id, reason }),
+    refreshRaces: query.refetch,
   };
 }

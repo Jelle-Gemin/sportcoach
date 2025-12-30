@@ -3,7 +3,7 @@
 import React, { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '../../contexts/AuthContext';
-import { useActivities } from '../../hooks/useActivities';
+import { useFlatActivities } from '../../hooks/useActivities';
 import { useProfile } from '../../hooks/useProfile';
 import { useInitialSync } from '../../hooks/useInitialSync';
 import { useTotalActivities } from '../../hooks/useTotalActivities';
@@ -35,7 +35,7 @@ export default function ProfilePage() {
     loadMore,
     hasMore,
     refetch,
-  } = useActivities(0, 10, isAuthenticated); // Load 10 activities initially, enabled when authenticated
+  } = useFlatActivities({ perPage: 10, enabled: isAuthenticated });
 
   const {
     isLoading: initialSyncLoading,

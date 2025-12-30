@@ -4,7 +4,7 @@ import { act, useState } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
 import { useRouter } from 'next/navigation';
 import { useEffect } from 'react';
-import { useActivities } from '../../hooks/useActivities';
+import { useFlatActivities } from '../../hooks/useActivities';
 import { ActivityFilters } from '../../components/activities/ActivityFilters';
 import { ActivityList } from '@/components/activities/ActivityList';
 import { SyncControl } from '@/components/profile/SyncControl';
@@ -28,7 +28,7 @@ export default function ActivitiesPage() {
     hasMore,
     loadMore,
     refetch
-  } = useActivities(0, 20, isAuthenticated);
+  } = useFlatActivities({ perPage: 20, enabled: isAuthenticated });
 
   useEffect(() => {
     if (!isLoading && !isAuthenticated) {

@@ -8,32 +8,47 @@ import {
   RACE_TYPES,
   AnalysisData
 } from '@/types/race';
-
-
+import { getCollection } from '@/lib/mongodb';
+import { getCached } from '../../lib/cache';
 
 export class RaceService {
-  private client: MongoClient;
-  private db: Db;
-  private racesCollection: Collection<Race>;
+  private client?: MongoClient;
+  private db?: Db;
+  private racesCollection?: Collection<Race>;
 
-  constructor(mongoUri: string, dbName: string) {
-    this.client = new MongoClient(mongoUri);
-    this.db = this.client.db(dbName);
-    this.racesCollection = this.db.collection('races');
+  constructor(mongoUri?: string, dbName?: string) {
+    // For backward compatibility, but prefer using shared connection
+    if (mongoUri && dbName) {
+      this.client = new MongoClient(mongoUri);
+      this.db = this.client.db(dbName);
+      this.racesCollection = this.db.collection('races');
+    }
   }
 
   async connect(): Promise<void> {
-    await this.client.connect();
+    if (this.client) {
+      await this.client.connect();
+    }
   }
 
   async disconnect(): Promise<void> {
-    await this.client.close();
+    if (this.client) {
+      await this.client.close();
+    }
+  }
+
+  private async getRacesCollection(): Promise<Collection<Race>> {
+    if (this.racesCollection) {
+      return this.racesCollection;
+    }
+    return getCollection('races') as unknown as Collection<Race>;
   }
 
   async initializeIndexes(): Promise<void> {
-    await this.racesCollection.createIndex({ userId: 1, raceDate: 1 });
-    await this.racesCollection.createIndex({ userId: 1, status: 1 });
-    await this.racesCollection.createIndex({ userId: 1, raceDate: 1, postRacePopupShown: 1 });
+    const collection = await this.getRacesCollection();
+    await collection.createIndex({ userId: 1, raceDate: 1 });
+    await collection.createIndex({ userId: 1, status: 1 });
+    await collection.createIndex({ userId: 1, raceDate: 1, postRacePopupShown: 1 });
   }
 
   async createRace(userId: number, input: CreateRaceInput): Promise<Race> {
@@ -58,7 +73,8 @@ export class RaceService {
       updatedAt: new Date()
     };
 
-    const result = await this.racesCollection.insertOne(race as Race);
+    const collection = await this.getRacesCollection();
+    const result = await collection.insertOne(race as Race);
     return { ...race, _id: result.insertedId };
   }
 
@@ -69,26 +85,43 @@ export class RaceService {
       query.status = status;
     }
 
-    const races = await this.racesCollection.find(query).sort({ raceDate: 1 }).toArray();
+    const racesCollection = await this.getRacesCollection();
+    const races = await racesCollection.find(query).sort({ raceDate: 1 }).toArray();
 
     // Ensure raceDate is a Date object
     races.forEach(race => {
-      console.log("Looped over race with id: ", race._id)
       if (!(race.raceDate instanceof Date)) {
         race.raceDate = new Date(race.raceDate);
       }
     });
 
     if (includeEstimates) {
-      // Recalculate estimates for planned races
-      for (const race of races) {
-        if (race.status === 'planned') {
-          race.estimatedTime = await this.calculateEstimatedTime({
+      // Batch fetch activities once for all planned races
+      const plannedRaces = races.filter(r => r.status === 'planned');
+      if (plannedRaces.length > 0) {
+        const activities = await getCached(
+          `activities:${userId}:90days`,
+          () => this.getRecentActivities(userId, 90),
+          300 // 5 minutes cache
+        );
+
+        // Parallelize AI estimate calculations
+        const estimatePromises = plannedRaces.map(race =>
+          this.calculateEstimatedTimeCached({
             raceType: race.raceType,
             userId,
-            targetDate: race.raceDate
-          });
-        }
+            targetDate: race.raceDate,
+            activities: activities,
+            metrics: {} // No metrics since calculations moved elsewhere
+          })
+        );
+
+        const estimates = await Promise.all(estimatePromises);
+
+        // Assign estimates back to races
+        plannedRaces.forEach((race, index) => {
+          race.estimatedTime = estimates[index];
+        });
       }
     }
 
@@ -97,7 +130,8 @@ export class RaceService {
 
   async getRace(userId: number, raceId: string): Promise<Race | null> {
     try {
-      const race = await this.racesCollection.findOne({
+      const collection = await this.getRacesCollection();
+      const race = await collection.findOne({
         _id: new ObjectId(raceId),
         userId
       });
@@ -126,7 +160,8 @@ export class RaceService {
         }
       }
 
-      const result = await this.racesCollection.findOneAndUpdate(
+      const collection = await this.getRacesCollection();
+      const result = await collection.findOneAndUpdate(
         { _id: new ObjectId(raceId), userId },
         { $set: updateData },
         { returnDocument: 'after' }
@@ -140,7 +175,8 @@ export class RaceService {
 
   async deleteRace(userId: number, raceId: string): Promise<boolean> {
     try {
-      const result = await this.racesCollection.deleteOne({
+      const collection = await this.getRacesCollection();
+      const result = await collection.deleteOne({
         _id: new ObjectId(raceId),
         userId
       });
@@ -152,7 +188,8 @@ export class RaceService {
 
   async completeRace(userId: number, raceId: string, actualFinishTime: number): Promise<Race | null> {
     try {
-      const result = await this.racesCollection.findOneAndUpdate(
+      const collection = await this.getRacesCollection();
+      const result = await collection.findOneAndUpdate(
         { _id: new ObjectId(raceId), userId, status: 'planned' },
         {
           $set: {
@@ -173,7 +210,8 @@ export class RaceService {
 
   async skipRace(userId: number, raceId: string, skipReason?: string): Promise<Race | null> {
     try {
-      const result = await this.racesCollection.findOneAndUpdate(
+      const collection = await this.getRacesCollection();
+      const result = await collection.findOneAndUpdate(
         { _id: new ObjectId(raceId), userId, status: 'planned' },
         {
           $set: {
@@ -200,7 +238,8 @@ export class RaceService {
     // - Race date has passed
     // - Race date is within last 7 days
     // - Popup hasn't been shown yet
-    const race = await this.racesCollection.findOne({
+    const collection = await this.getRacesCollection();
+    const race = await collection.findOne({
       userId,
       status: 'planned',
       raceDate: {
@@ -215,7 +254,8 @@ export class RaceService {
 
   async dismissPostRacePopup(userId: number, raceId: string): Promise<boolean> {
     try {
-      const result = await this.racesCollection.updateOne(
+      const collection = await this.getRacesCollection();
+      const result = await collection.updateOne(
         { _id: new ObjectId(raceId), userId },
         {
           $set: {
@@ -235,11 +275,23 @@ export class RaceService {
   async calculateEstimatedTime(params: EstimatedTimeParams): Promise<number> {
     const { raceType, userId, targetDate } = params;
 
-    // Get user's recent activities (last 90 days for better analysis)
-    const recentActivities = await this.getRecentActivities(userId, 90);
+    // Get user's recent activities (last 30 days for better analysis)
+    const activities = await this.getRecentActivities(userId, 30);
 
     // Prepare data for AI analysis
-    const analysisData = this.prepareAnalysisData(recentActivities, RACE_TYPES[raceType as keyof typeof RACE_TYPES], targetDate);
+    const analysisData = this.prepareAnalysisData(activities, RACE_TYPES[raceType as keyof typeof RACE_TYPES], targetDate);
+
+    // Use AI to generate realistic estimate
+    const aiEstimate = await this.getAIEstimate(analysisData);
+
+    return aiEstimate;
+  }
+
+  private async calculateEstimatedTimeCached(params: EstimatedTimeParams & { activities: Activity[], metrics: any }): Promise<number> {
+    const { raceType, targetDate, activities, metrics } = params;
+
+    // Prepare data for AI analysis using pre-fetched activities
+    const analysisData = this.prepareAnalysisData(activities, RACE_TYPES[raceType as keyof typeof RACE_TYPES], targetDate);
 
     // Use AI to generate realistic estimate
     const aiEstimate = await this.getAIEstimate(analysisData);
@@ -259,32 +311,46 @@ export class RaceService {
     await stravaSync.connect();
 
     try {
-      const result = await stravaSync.getActivities(Number(userId), 200, 0, undefined, cutoffDate);
+      const projection = {
+        stravaId: 1,
+        type: 1,
+        distance: 1,
+        moving_time: 1,
+        start_date_local: 1,
+        average_speed: 1,
+        has_heartrate: 1,
+        average_heartrate: 1,
+        max_heartrate: 1,
+        total_elevation_gain: 1,
+        laps: 1,
+        avgCadence: 1
+      };
+
+      const result = await stravaSync.getActivities(userId, 0, 0, undefined, cutoffDate, undefined, projection);
       return result.activities.map(activity => this.mapActivityToInterface(activity));
     } finally {
       await stravaSync.disconnect();
     }
   }
 
-  private mapActivityToInterface(activity: any): Activity {
+  private mapActivityToInterface(activity: Record<string, any>): Activity {
     return {
       id: activity.stravaId,
       type: activity.type,
       distance: activity.distance || 0,
-      movingTime: activity.movingTime || 0,
-      startDate: activity.date.toISOString(),
+      movingTime: activity.moving_time || 0,
+      startDate: activity.start_date_local,
       averageSpeed: activity.average_speed,
-      hasHeartrate: !!(activity.avgHR || activity.maxHR),
-      averageHeartrate: activity.avgHR,
-      maxHeartrate: activity.maxHR,
-      totalElevationGain: activity.total_elevation_gain
+      hasHeartrate: activity.has_heartrate,
+      averageHeartrate: activity.average_heartrate,
+      maxHeartrate: activity.max_heartrate,
+      totalElevationGain: activity.total_elevation_gain,
+      laps: activity.laps,
+      average_cadence: activity.avgCadence
     };
   }
 
-  private prepareAnalysisData(activities: Activity[], raceConfig: any, targetDate: Date) {
-    // Calculate time until race
-    const daysUntilRace = Math.floor((targetDate.getTime() - Date.now()) / (1000 * 60 * 60 * 24));
-
+  private prepareAnalysisData(activities: Activity[], raceConfig: any, targetDate: Date): any[] {
     // Get sport-specific activities
     const relevantActivities = activities.filter((a) => {
       if (raceConfig.sport === "run") return a.type === "Run";
@@ -293,54 +359,25 @@ export class RaceService {
       return false;
     });
 
-    // Calculate training metrics
-    const metrics = {
-      // Volume metrics
-      totalDistance: relevantActivities.reduce((sum, a) => sum + (a.distance || 0), 0) / 1000, // km
-      totalTime: relevantActivities.reduce((sum, a) => sum + a.movingTime, 0) / 3600, // hours
-      averageWeeklyDistance: this.calculateWeeklyAverage(relevantActivities, "distance"),
+    console.log("Amount of relevant activities", relevantActivities.length)
 
-      // Pace/speed metrics
-      averagePace: this.calculateAveragePace(relevantActivities.filter((a) => a.type === "Run")),
-      bestRecentPace: this.getBestPace(relevantActivities.filter((a) => a.type === "Run"), 30),
-
-      // Consistency metrics
-      activitiesCount: relevantActivities.length,
-      averageActivitiesPerWeek: relevantActivities.length / 12, // last ~90 days = ~12 weeks
-
-      // Performance metrics
-      longestDistance: Math.max(...relevantActivities.map((a) => (a.distance || 0) / 1000)),
-      recentPRs: this.findRecentPRs(relevantActivities),
-
-      // Heart rate metrics (if available)
-      averageHR: this.calculateAverageHR(relevantActivities),
-      hrTrend: this.calculateHRTrend(relevantActivities),
-    };
-
-    return {
-      raceType: raceConfig,
-      daysUntilRace,
-      trainingMetrics: metrics,
-      activityCount: relevantActivities.length,
-    };
+    // Transform activities to the required format
+    return relevantActivities.map(activity => ({
+      distance: activity.distance || 0,
+      elapsed_time: activity.movingTime || 0,
+      average_hr: activity.averageHeartrate || 0,
+      laps: activity.laps,
+      sport_type: activity.type.toLowerCase(),
+      start_date: activity.startDate,
+      average_cadence: activity.average_cadence
+    }));
   }
 
-  private async getAIEstimate(data: any): Promise<number> {
+  private async getAIEstimate(activities: any[]): Promise<number> {
     const prompt = `You are an expert running and triathlon coach. Analyze this athlete's training data and provide a realistic race time estimate.
 
-Race Details:
-- Type: ${data.raceType.sport === "run" ? `${data.raceType.distance}km run` : data.raceType.sport}
-- Days until race: ${data.daysUntilRace}
-
-Athlete's Training Data (last 90 days):
-- Total distance: ${data.trainingMetrics.totalDistance.toFixed(1)}km
-- Total training time: ${data.trainingMetrics.totalTime.toFixed(1)} hours
-- Weekly average distance: ${data.trainingMetrics.averageWeeklyDistance.toFixed(1)}km
-- Average pace: ${data.trainingMetrics.averagePace || "N/A"}
-- Best recent pace (30 days): ${data.trainingMetrics.bestRecentPace || "N/A"}
-- Longest single distance: ${data.trainingMetrics.longestDistance.toFixed(1)}km
-- Activities per week: ${data.trainingMetrics.averageActivitiesPerWeek.toFixed(1)}
-- Activity count: ${data.activityCount}
+Training Data (JSON format):
+${JSON.stringify(activities, null, 2)}
 
 Provide ONLY a realistic finish time estimate in seconds as a single integer. Consider:
 1. Current fitness level based on recent training
@@ -349,10 +386,14 @@ Provide ONLY a realistic finish time estimate in seconds as a single integer. Co
 4. Proper pacing strategy for the distance
 5. Whether they have adequate training volume for this race
 
-Response format: Just the number of seconds (e.g., "12600" for 3:30:00) DO NOT INCLUDE ANY OTHER TEXT`;
+IMPORTANT: Your response must be ONLY the number of seconds as an integer. Do not include any text, explanations, quotes, or other characters. Just the number (e.g., 12600)`;
 
-    console.log("Prompt for: " + prompt)
-
+    // Write prompt to file for debugging/analysis
+    const fs = await import('fs');
+    const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+    const filename = `ai-prompt-${timestamp}.txt`;
+    fs.writeFileSync(filename, prompt);
+    console.log(`Prompt written to file: ${filename}`);
     try {
       const response = await fetch("http://localhost:12434/engines/llama.cpp/v1/completions", {
         method: "POST",
@@ -362,39 +403,35 @@ Response format: Just the number of seconds (e.g., "12600" for 3:30:00) DO NOT I
         body: JSON.stringify({
           "model": "ai/qwen3:4B-UD-Q4_K_XL",
           "prompt": prompt,
-          "max_tokens": 20,
+          "max_tokens": 200,
         })
       });
       const result = await response.json();
       const estimateText = result.choices[0].text.trim();
-      const estimateSeconds = parseInt(estimateText);
+      console.log("EstimatedText: ", estimateText)
+
+      // Extract just the numeric part from the response
+      const numericMatch = estimateText.match(/\d+/);
+      const estimateSeconds = numericMatch ? parseInt(numericMatch[0]) : NaN;
 
       // Validate the estimate is reasonable
       if (isNaN(estimateSeconds) || estimateSeconds < 0 || estimateSeconds > 86400) {
         // Fallback to calculation-based estimate
         console.warn("AI estimate invalid, using fallback calculation");
-        return this.fallbackEstimate(data);
+        return this.fallbackEstimate({ activities });
       }
 
       return estimateSeconds;
     } catch (error) {
       console.error("AI estimate failed, using fallback:", error);
-      return this.fallbackEstimate(data);
+      return this.fallbackEstimate({ activities });
     }
   }
 
   private fallbackEstimate(data: any): number {
-    const { raceType, trainingMetrics } = data;
-
-    if (raceType.sport === "run") {
-      // Use simple pace extrapolation
-      const avgPaceSecondsPerKm = this.parsePace(trainingMetrics.averagePace);
-      const raceDayFactor = 0.97; // Assume 3% improvement on race day
-      return Math.round(avgPaceSecondsPerKm * raceType.distance * raceDayFactor);
-    }
-
-    // For other sports, provide conservative estimates
-    return this.getConservativeEstimate(raceType.sport, raceType.distance);
+    // For now, return a conservative estimate since we don't have race details in this context
+    // This fallback is used when AI fails, but we need race configuration to calculate properly
+    return 7200; // 2 hours as default fallback
   }
 
   private calculateWeeklyAverage(activities: Activity[], metric: string): number {

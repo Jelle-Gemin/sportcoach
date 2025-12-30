@@ -1,5 +1,5 @@
 import { StravaActivity } from '@/services/stravaApi';
-import React from 'react';
+import React, { memo } from 'react';
 import { useRouter } from 'next/navigation';
 
 interface ActivityCardProps {
@@ -7,7 +7,7 @@ interface ActivityCardProps {
   onClick?: (id: number) => void;
 }
 
-export function ActivityCard({ activity, onClick }: ActivityCardProps) {
+export const ActivityCard = memo(function ActivityCard({ activity, onClick }: ActivityCardProps) {
   const router = useRouter();
 
   const formatDistance = (meters: number): string => {
@@ -76,9 +76,8 @@ export function ActivityCard({ activity, onClick }: ActivityCardProps) {
   return (
     <div
       onClick={handleClick}
-      className={`bg-card rounded-lg shadow-sm p-4 border border-gray-100 hover:bg-cardHover hover:shadow-md transition-all cursor-pointer ${
-        onClick ? 'hover:border-primary' : ''
-      }`}
+      className={`bg-card rounded-lg shadow-sm p-4 border border-gray-100 hover:bg-cardHover hover:shadow-md transition-all cursor-pointer ${onClick ? 'hover:border-primary' : ''
+        }`}
     >
       <div className="flex items-start justify-between">
         <div className="flex items-start space-x-3 flex-1">
@@ -109,4 +108,4 @@ export function ActivityCard({ activity, onClick }: ActivityCardProps) {
       </div>
     </div>
   );
-}
+});

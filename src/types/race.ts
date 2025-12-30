@@ -166,6 +166,8 @@ export interface Activity {
   averageHeartrate?: number;
   maxHeartrate?: number;
   totalElevationGain?: number;
+  laps?: any[];
+  average_cadence?: number;
 }
 
 // AI Estimation Parameters
