@@ -13,6 +13,7 @@ import { ProfileHeader } from '@/components/profile/ProfileHeader';
 import { ProfileSkeleton } from '@/components/profile/ProfileSkeleton';
 import { ActivityList } from '@/components/profile/ActivityList';
 import { SyncControl } from '@/components/profile/SyncControl';
+import { RaceManagement } from '@/components/profile/RaceManagement';
 import { AppLayout } from '../../components/layout/AppLayout';
 
 
@@ -146,6 +147,8 @@ export default function ProfilePage() {
                 measurementPreference={athlete.measurement_preference}
               />
             )}
+
+            <RaceManagement />
 
             <SyncControl />
 

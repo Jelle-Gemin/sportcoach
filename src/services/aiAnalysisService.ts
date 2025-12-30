@@ -1,7 +1,7 @@
 import { MongoClient, Db, Collection } from 'mongodb';
 
 // @ts-ignore - puter library doesn't have TypeScript definitions
-import puter from 'puter';
+import puter from "@heyputer/puter.js";
 
 // TypeScript interfaces
 export interface ActivityAnalysisInput {
@@ -190,23 +190,22 @@ export class AIAnalysisService {
 
   private async generateSection(activity: ActivityAnalysisInput, section: AnalysisSection): Promise<string> {
     const prompt = this.generatePrompt(activity, section);
+    console.log("Puter: ", puter)
 
     return this.rateLimiter.throttle(async () => {
-      const response = await this.puter.ai.chat({
-        model: AI_CONFIG.model,
-        messages: [
-          {
-            role: 'system',
-            content: 'You are an expert running and cycling coach providing detailed workout analysis. Be encouraging but honest. Focus on patterns, improvements, and coaching advice.'
-          },
-          {
-            role: 'user',
-            content: prompt
-          }
-        ],
-        temperature: AI_CONFIG.temperature,
-        max_tokens: AI_CONFIG.max_tokens
-      });
+      const messages = [
+        {
+          role: 'system',
+          content: 'You are an expert running and cycling coach providing detailed workout analysis. Be encouraging but honest. Focus on patterns, improvements, and coaching advice.'
+        },
+        {
+          role: 'user',
+          content: prompt
+        }
+      ];
+
+      const response = await this.puter.ai.chat(messages) as any;
+      console.log("Response: ", response)
 
       return response.choices[0].message.content || this.getFallbackContent(section, activity);
     });
